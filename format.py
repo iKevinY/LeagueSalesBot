@@ -12,21 +12,13 @@ rotation = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
 r = settings.currentRotation
 
 # Automate rotation of sale rotation
-nextRotation = """
-Next skin sale: **{0} RP, {1} RP, {2} RP**  
-Two sales from now: **{3} RP, {4} RP, {5} RP**  
-Three sales from now: **{6} RP, {7} RP, {8} RP**  
-""".format(
-    rotation[(r+1)%4][0], rotation[(r+1)%4][1], rotation[(r+1)%4][2],
-    rotation[(r+2)%4][0], rotation[(r+2)%4][1], rotation[(r+2)%4][2],
-    rotation[(r+3)%4][0], rotation[(r+3)%4][1], rotation[(r+3)%4][2]
-    )
-
-
+nextRotation = "Next skin sale: **{0} RP, {1} RP, {2} RP**.".format(rotation[(r+1)%4][0], rotation[(r+1)%4][1], rotation[(r+1)%4][2])
 
 horizontalRule = "----"
 
-messageFooter = "[^Link ^to ^source ^post]({0})^. ^This ^bot ^is ^developed ^and ^maintained ^by ^/u/Pewqazz. ^Feedback ^and ^suggestions ^are ^welcomed ^in ^/r/LeagueSalesBot.".format(getcontent.articleLink)
+sourcePost = "[Link to source post]({0}).".format(getcontent.articleLink)
+
+messageFooter = "^This ^bot ^is ^developed ^and ^maintained ^by ^/u/Pewqazz. ^Feedback ^and ^suggestions ^are ^welcomed ^in ^/r/LeagueSalesBot."
 
 def saleOutput(sale):
     champName = ""
@@ -116,4 +108,4 @@ def postBody(saleArray):
     for sale in saleArray:
         sales = sales + saleOutput(sale) + "\n"
 
-    return tableHeader + "\n" + tableDivider + "\n" + sales + nextRotation + "\n" + horizontalRule + "\n" + messageFooter
+    return tableHeader + "\n" + tableDivider + "\n" + sales + nextRotation + " " + sourcePost + "\n\n" + horizontalRule + "\n" + messageFooter
