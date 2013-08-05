@@ -6,7 +6,7 @@ import re
 import httplib2
 import calendar
 
-import settings
+import lastrun
 
 # Load news page on League of Legends website
 header, content = httplib2.Http().request("http://beta.na.leagueoflegends.com/en/news/store/sales/")
@@ -17,7 +17,7 @@ articleSlug = articleData[0]
 articleName = articleData[1]
 articleLink = "http://beta.na.leagueoflegends.com" + articleSlug
 
-if articleLink == settings.lastArticleLink:
+if articleLink == lastrun.articleLink:
     sys.exit(0)
 else:
     pass
@@ -35,6 +35,4 @@ if firstMonth == secondMonth:
 else:
     postTitle = "Champion & Skin Sale (" + firstMonth + " " + firstDate + " – " + secondMonth + " " + secondDate + ")"
 
-print postTitle
-
-# header, content = httplib2.Http().request(articleLink)
+header, content = httplib2.Http().request(articleLink)

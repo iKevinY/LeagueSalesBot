@@ -1,6 +1,6 @@
 import re
 import getcontent
-import settings
+import lastrun
 
 wikiLink = "http://leagueoflegends.wikia.com/wiki/"
 
@@ -9,7 +9,7 @@ tableDivider = "|:----:|:--------------:|:----------:|:-------------:|:------:|"
 
 rotation = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
 
-r = settings.currentRotation
+r = lastrun.rotation
 
 # Automate rotation of sale rotation
 nextRotation = "Next skin sale: **{0} RP, {1} RP, {2} RP**.".format(rotation[(r+1)%4][0], rotation[(r+1)%4][1], rotation[(r+1)%4][2])

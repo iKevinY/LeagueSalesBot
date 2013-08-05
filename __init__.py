@@ -55,3 +55,8 @@ for i in range(len(saleArray)):
 def main():
     postBody = format.postBody(saleArray)
     post.post(getcontent.postTitle, postBody)
+    
+    # Make appropriate changes to settings.py if post succeeds
+    f = open('lastrun.py', 'r+')
+    f.write("articleLink = \"" + getcontent.articleLink + "\"\n" + "rotation = " + str(format.r + 1) + "\n")
+    f.close()
