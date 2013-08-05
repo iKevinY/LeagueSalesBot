@@ -2,7 +2,6 @@
 import getcontent
 import format
 import post
-import settings
 
 # Other modules
 import re
@@ -55,5 +54,4 @@ for i in range(len(saleArray)):
 
 def main():
     postBody = format.postBody(saleArray)
-
     post.post(getcontent.postTitle, postBody)
