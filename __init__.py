@@ -34,7 +34,6 @@ skin1, skin2, skin3 = Skin(), Skin(), Skin()
 champ1, champ2, champ3 = Champ(), Champ(), Champ()
 saleArray = [ skin1, skin2, skin3, champ1, champ2, champ3 ]
 
-titleRegex = re.compile("<title>(.*?)</title>")
 saleRegex = re.compile("<ul><li>(.*?<strong>\d{3} RP</strong>)</li></ul>")
 imageRegex = re.compile("<img src=\"(http://riot-web-static.s3.amazonaws.com/images/news/\S*.jpg)")
 
@@ -44,6 +43,7 @@ for i in range(len(saleArray)):
     saleArray[i].text = unicode(re.findall(saleRegex, content)[i], "utf-8")
     saleArray[i].processSale()
 
+    # Skins have two thumbnails while champions only have splash art
     if saleArray[i].__class__ is Skin:
         saleArray[i].thumb1 = re.findall(imageRegex, content)[imageIndex]
         imageIndex += 1
