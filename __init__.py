@@ -1,6 +1,8 @@
 # Local file imports
 import getcontent
 import format
+import post
+import settings
 
 # Other modules
 import re
@@ -8,9 +10,6 @@ import re
 content = getcontent.content
 
 class Sale:
-    text = ""
-    name = ""
-    cost = ""
 
     def processSale(self):
         # Strip HTML tags
@@ -20,14 +19,12 @@ class Sale:
         self.name = text[:-7]
 
         cost = re.findall('\d+', text)
-        self.cost = cost[0]
+        self.cost = int(cost[0])
 
 class Skin(Sale):
-    thumb1 = ""
-    thumb2 = ""
-
+    pass
 class Champ(Sale):
-    splash = ""
+    pass
 
 # Declare sale objects
 skin1, skin2, skin3 = Skin(), Skin(), Skin()
@@ -57,12 +54,6 @@ for i in range(len(saleArray)):
         # Something went wrong
 
 def main():
-    print format.tableHeader
-    print format.tableDivider
+    postBody = format.postBody(saleArray)
 
-    for sale in saleArray:
-        print format.saleOutput(sale)
-
-    print format.nextRotation
-    print format.horizontalRule
-    print format.messageFooter
+    post.post(getcontent.postTitle, postBody)

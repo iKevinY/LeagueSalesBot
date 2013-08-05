@@ -1,5 +1,6 @@
 import re
 import getcontent
+import settings
 
 wikiLink = "http://leagueoflegends.wikia.com/wiki/"
 
@@ -7,7 +8,8 @@ tableHeader  = "| Icon | Skin/Champion  | Sale Price | Regular Price | Images |"
 tableDivider = "|:----:|:--------------:|:----------:|:-------------:|:------:|"
 
 rotation = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
-r = 1
+
+r = settings.currentRotation
 
 # Automate rotation of sale rotation
 nextRotation = """
@@ -29,7 +31,7 @@ messageFooter = "[^Link ^to ^source ^post]({0})^. ^This ^bot ^is ^developed ^and
 def saleOutput(sale):
     champName = ""
     champLink = ""
-    
+
     # Differentiate between skin and champion sales
     try:
         sale.splash
@@ -89,22 +91,29 @@ def saleOutput(sale):
             champName = "Xin Zhao"
         else:
             champName = sale.name.rsplit(' ', 1)[1]
-        champLink = wikiLink + champName.replace(" ", "_")
+        
         imageString = "[1](" + sale.thumb1 + "), [2](" + sale.thumb2 + ")"
     else: # It's a champion
         champName = sale.name
-        champLink = wikiLink + champName.replace(" ", "_")
         imageString = "[1](" + sale.splash + ")"
 
+    champLink = wikiLink + champName.replace(" ", "_")
     icon = "[](/" + champName.lower().replace(" ", "").replace(".", "").replace("'", "") + ")"
 
-    regularPrice = ""
+    regularPrice = 0
     # Calculate regular price of item
-    if sale.cost == "487":
-        regularPrice = "975"
-    elif sale.cost == "282":
-        regularPrice = "585"
+    if sale.cost == 487:
+        regularPrice = 975
+    elif sale.cost == 292:
+        regularPrice = 585
     else:
         regularPrice = str(int(sale.cost) * 2)
 
-    return "|" + icon + "|" + "**[" + sale.name + "](" + champLink + ")**" + "|" + sale.cost + " RP" + "|" + regularPrice + " RP" + "|" + imageString + "|"
+    return "|" + icon + "|" + "**[" + sale.name + "](" + champLink + ")**" + "|" + str(sale.cost) + " RP" + "|" + str(regularPrice) + " RP" + "|" + imageString + "|"
+
+def postBody(saleArray):
+    sales = ""
+    for sale in saleArray:
+        sales = sales + saleOutput(sale) + "\n"
+
+    return tableHeader + "\n" + tableDivider + "\n" + sales + nextRotation + "\n" + horizontalRule + "\n" + messageFooter
