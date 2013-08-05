@@ -3,7 +3,7 @@ import re
 import httplib2
 
 # Load news page on League of Legends website
-header, content = httplib2.Http().request("http://beta.na.leagueoflegends.com/en/news/")
+header, content = httplib2.Http().request("http://beta.na.leagueoflegends.com/en/news/store/sales/")
 
 # Check news page for first <h4> element with "champion-and-skin-sales" in slug
 articleData = re.findall("<h4><a href=\"(.*?skin-sale.*?)\">(.*?)</a></h4>", content)[0]
