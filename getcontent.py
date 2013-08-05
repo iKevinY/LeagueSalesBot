@@ -18,6 +18,7 @@ articleName = articleData[1]
 articleLink = "http://beta.na.leagueoflegends.com" + articleSlug
 
 if articleLink == lastrun.articleLink:
+    print 'First sale is same as last posted sale. (' + articleLink + ')'
     sys.exit(0)
 else:
     pass
