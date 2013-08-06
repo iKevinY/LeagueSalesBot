@@ -12,12 +12,10 @@ rotation = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
 r = lastrun.rotation
 
 # Automate rotation of sale rotation
-nextRotation = "Next skin sale: **{0} RP, {1} RP, {2} RP**.".format(rotation[(r+1)%4][0], rotation[(r+1)%4][1], rotation[(r+1)%4][2])
+nextRotation = "Next skin sale: **{0} RP, {1} RP, {2} RP**.".format(rotation[r%4][0], rotation[r%4][1], rotation[r%4][2])
 
 horizontalRule = "----"
-
 sourcePost = "[Link to source post]({0}).".format(getcontent.articleLink)
-
 messageFooter = "^This ^bot ^is ^developed ^and ^maintained ^by ^/u/Pewqazz. ^Feedback ^and ^suggestions ^are ^welcomed ^in ^/r/LeagueSalesBot."
 
 def saleOutput(sale):
