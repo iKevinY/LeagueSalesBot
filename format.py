@@ -78,10 +78,10 @@ def saleOutput(sale):
         else:
             champName = sale.name.rsplit(' ', 1)[1]
         
-        imageString = "[1](" + sale.thumb1 + "), [2](" + sale.thumb2 + ")"
+        imageString = "[Splash](" + sale.splash + "), [In-Game](" + sale.inGame + ")"
     else: # It's a champion
         champName = sale.name
-        imageString = "[1](" + sale.splash + ")"
+        imageString = "[Splash](" + sale.splash + ")"
 
     champLink = wikiLink + champName.replace(" ", "_")
     icon = "[](/" + champName.lower().replace(" ", "").replace(".", "").replace("'", "") + ")"
