@@ -1,15 +1,13 @@
-# Local file imports
 import getcontent
 import format
 import post
 
-# Other modules
+import os
 import re
 
 content = getcontent.content
 
 class Sale:
-
     def processSale(self):
         # Strip HTML tags
         text = (re.sub('<.*?>', '', self.text))
@@ -21,9 +19,9 @@ class Sale:
         self.cost = int(cost[0])
 
 class Skin(Sale):
-    pass
+    isSkin = True
 class Champ(Sale):
-    pass
+    isSkin = False
 
 # Declare sale objects
 skin1, skin2, skin3 = Skin(), Skin(), Skin()
@@ -34,29 +32,26 @@ saleRegex = re.compile("<ul><li>(.*?<strong>\d{3} RP</strong>)</li></ul>")
 imageRegex = re.compile("<img src=\"(http://riot-web-static.s3.amazonaws.com/images/news/\S*.jpg)")
 
 # Set sale text to .text attributes of saleArray elements
-imageIndex = 0
 for i in range(len(saleArray)):
     saleArray[i].text = unicode(re.findall(saleRegex, content)[i], "utf-8")
     saleArray[i].processSale()
 
     # Skins have two thumbnails while champions only have splash art
     if saleArray[i].__class__ is Skin:
-        saleArray[i].thumb1 = re.findall(imageRegex, content)[imageIndex]
-        imageIndex += 1
-        saleArray[i].thumb2 = re.findall(imageRegex, content)[imageIndex]
-        imageIndex += 1
+        saleArray[i].thumb1 = re.findall(imageRegex, content)[(i*2)]
+        saleArray[i].thumb2 = re.findall(imageRegex, content)[(i*2)+1]
     elif saleArray[i].__class__ is Champ:
-        saleArray[i].splash = re.findall(imageRegex, content)[imageIndex]
-        imageIndex += 1
+        saleArray[i].splash = re.findall(imageRegex, content)[i+3]
     else:
         pass
-        # Something went wrong
 
 def main():
     postBody = format.postBody(saleArray)
     post.post(getcontent.postTitle, postBody)
     
-    # Make appropriate changes to settings.py if post succeeds
-    f = open('lastrun.py', 'r+')
+    # Make appropriate changes to lastrun.py if post succeeds
+    directory = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(directory, 'lastrun.py')
+    f = open(path, 'r+')
     f.write("articleLink = \"" + getcontent.articleLink + "\"\n" + "rotation = " + str(format.r + 1) + "\n")
     f.close()

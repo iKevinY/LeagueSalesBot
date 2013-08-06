@@ -14,7 +14,6 @@ r = lastrun.rotation
 # Automate rotation of sale rotation
 nextRotation = "Next skin sale: **{0} RP, {1} RP, {2} RP**.".format(rotation[r%4][0], rotation[r%4][1], rotation[r%4][2])
 
-horizontalRule = "----"
 sourcePost = "[Link to source post]({0}).".format(getcontent.articleLink)
 messageFooter = "^This ^bot ^is ^developed ^and ^maintained ^by ^/u/Pewqazz. ^Feedback ^and ^suggestions ^are ^welcomed ^in ^/r/LeagueSalesBot."
 
@@ -22,10 +21,7 @@ def saleOutput(sale):
     champName = ""
     champLink = ""
 
-    # Differentiate between skin and champion sales
-    try:
-        sale.splash
-    except AttributeError: # It's a skin
+    if sale.isSkin == True:
         # Try all exception skins (reference: http://leagueoflegends.wikia.com/wiki/Champion_skin)
         if sale.name == "Emumu":
             champName = "Amumu"
@@ -99,11 +95,11 @@ def saleOutput(sale):
     else:
         regularPrice = str(int(sale.cost) * 2)
 
-    return "|" + icon + "|" + "**[" + sale.name + "](" + champLink + ")**" + "|" + str(sale.cost) + " RP" + "|" + str(regularPrice) + " RP" + "|" + imageString + "|"
+    return "|" + icon + "|**[" + sale.name + "](" + champLink + ")**|" + str(sale.cost) + " RP|" + str(regularPrice) + " RP|" + imageString + "|"
 
 def postBody(saleArray):
     sales = ""
     for sale in saleArray:
         sales = sales + saleOutput(sale) + "\n"
 
-    return tableHeader + "\n" + tableDivider + "\n" + sales + nextRotation + " " + sourcePost + "\n\n" + horizontalRule + "\n" + messageFooter
+    return tableHeader + "\n" + tableDivider + "\n" + sales + nextRotation + " " + sourcePost + "\n\n----\n" + messageFooter
