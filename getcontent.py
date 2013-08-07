@@ -9,32 +9,41 @@ import calendar
 import lastrun
 import settings
 
-# Load news page on League of Legends website
-header, content = httplib2.Http().request(settings.newsPage)
 
-# Check news page for first <h4> element with "champion-and-skin-sales" in slug
-articleData = re.findall("<h4><a href=\"(.*?champion.*?skin-sale.*?)\">(.*?)</a></h4>", content)[0]
-articleSlug = articleData[0]
-articleName = articleData[1]
-articleLink = "http://beta.na.leagueoflegends.com" + articleSlug
+def getcontent(isTest):
+    # Load news page on League of Legends website
+    header, content = httplib2.Http().request(settings.newsPage)
 
-if articleLink == lastrun.articleLink:
-    print 'First sale is same as last posted sale. (' + articleLink + ')'
-    sys.exit(0)
-else:
-    pass
+    # Check news page for first <h4> element with "champion-and-skin-sales" in slug
+    articleData = re.findall("<h4><a href=\"(.*?champion.*?skin-sale.*?)\">(.*?)</a></h4>", content)[0]
+    articleSlug = articleData[0]
+    articleName = articleData[1]
+    articleLink = "http://beta.na.leagueoflegends.com" + articleSlug
 
-articleDate = re.findall(".*?: (\d{1,2})\.(\d{1,2}) - (\d{1,2})\.(\d{1,2})", articleName)[0]
+    if articleLink == lastrun.articleLink:
+        print 'First sale is same as last posted sale. (' + articleLink + ')'
 
-firstMonth = calendar.month_name[int(articleDate[0])]
-secondMonth = calendar.month_name[int(articleDate[2])]
+        if isTest:
+            print "\n"
+            pass
+        else:
+            sys.exit(0)
+    else:
+        pass
 
-firstDate = articleDate[1].lstrip('0')
-secondDate = articleDate[3].lstrip('0')
+    articleDate = re.findall(".*?: (\d{1,2})\.(\d{1,2}) - (\d{1,2})\.(\d{1,2})", articleName)[0]
 
-if firstMonth == secondMonth:
-    postTitle = "Champion & Skin Sale (" + firstMonth + " " + firstDate + "–" + secondDate + ")"
-else:
-    postTitle = "Champion & Skin Sale (" + firstMonth + " " + firstDate + " – " + secondMonth + " " + secondDate + ")"
+    firstMonth = calendar.month_name[int(articleDate[0])]
+    secondMonth = calendar.month_name[int(articleDate[2])]
 
-header, content = httplib2.Http().request(articleLink)
+    firstDate = articleDate[1].lstrip('0')
+    secondDate = articleDate[3].lstrip('0')
+
+    if firstMonth == secondMonth:
+        postTitle = "Champion & Skin Sale (" + firstMonth + " " + firstDate + "–" + secondDate + ")"
+    else:
+        postTitle = "Champion & Skin Sale (" + firstMonth + " " + firstDate + " – " + secondMonth + " " + secondDate + ")"
+
+    header, content = httplib2.Http().request(articleLink)
+
+    return content, postTitle, articleLink

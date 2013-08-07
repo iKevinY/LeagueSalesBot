@@ -1,5 +1,4 @@
 import re
-import getcontent
 import lastrun
 
 wikiLink = "http://leagueoflegends.wikia.com/wiki/"
@@ -14,7 +13,6 @@ r = lastrun.rotation
 # Automate rotation of sale rotation
 nextRotation = "Next skin sale: **{0} RP, {1} RP, {2} RP**.".format(rotation[r%4][0], rotation[r%4][1], rotation[r%4][2])
 
-sourcePost = "Link to [source post]({0})".format(getcontent.articleLink)
 messageFooter = "^This ^bot ^was ^written ^by ^/u/Pewqazz. ^Feedback ^and ^suggestions ^are ^welcomed ^in ^/r/LeagueSalesBot."
 
 def saleOutput(sale):
@@ -97,7 +95,8 @@ def saleOutput(sale):
 
     return "|" + icon + "|**[" + sale.name + "](" + champLink + ")**|" + str(sale.cost) + " RP|" + str(regularPrice) + " RP|" + imageString + "|"
 
-def postBody(saleArray, bannerLink):
+def postBody(saleArray, bannerLink, articleLink):
+    sourcePost = "Link to [source post]({0})".format(articleLink)
     sales = ""
     for sale in saleArray:
         sales = sales + saleOutput(sale) + "\n"
