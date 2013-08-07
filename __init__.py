@@ -51,7 +51,7 @@ bannerLink = re.findall(bannerRegex, content)[0]
 def main():
     postBody = format.postBody(saleArray, bannerLink)
     post.post(getcontent.postTitle, postBody)
-    
+
     # Make appropriate changes to lastrun.py if post succeeds
     directory = os.path.dirname(os.path.abspath(__file__))
     path = os.path.join(directory, 'lastrun.py')

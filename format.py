@@ -14,8 +14,8 @@ r = lastrun.rotation
 # Automate rotation of sale rotation
 nextRotation = "Next skin sale: **{0} RP, {1} RP, {2} RP**.".format(rotation[r%4][0], rotation[r%4][1], rotation[r%4][2])
 
-sourcePost = "[Link to source post]({0}). ".format(getcontent.articleLink)
-messageFooter = "^This ^bot ^is ^developed ^and ^maintained ^by ^/u/Pewqazz. ^Feedback ^and ^suggestions ^are ^welcomed ^in ^/r/LeagueSalesBot."
+sourcePost = "Link to [source post]({0})".format(getcontent.articleLink)
+messageFooter = "^This ^bot ^was ^written ^by ^/u/Pewqazz. ^Feedback ^and ^suggestions ^are ^welcomed ^in ^/r/LeagueSalesBot."
 
 def saleOutput(sale):
     champName = ""
@@ -102,6 +102,6 @@ def postBody(saleArray, bannerLink):
     for sale in saleArray:
         sales = sales + saleOutput(sale) + "\n"
 
-    saleBanner = "[Sale banner]({0}).".format(bannerLink)
+    saleBanner = "[sale banner]({0}).".format(bannerLink)
 
-    return tableHeader + "\n" + tableDivider + "\n" + sales + nextRotation + " " + sourcePost + saleBanner + "\n\n----\n" + messageFooter
+    return tableHeader + "\n" + tableDivider + "\n" + sales + nextRotation + " " + sourcePost + " and " + saleBanner + "\n\n----\n" + messageFooter
