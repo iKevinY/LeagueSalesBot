@@ -30,6 +30,7 @@ saleArray = [ skin1, skin2, skin3, champ1, champ2, champ3 ]
 
 saleRegex = re.compile("<ul><li>(.*?<strong>\d{3} RP</strong>)</li></ul>")
 imageRegex = re.compile("<a href=\"(http://riot-web-static\.s3\.amazonaws\.com/images/news/\S*?\.jpg)\"")
+bannerRegex = re.compile("<img .*? src=\"(http://beta\.na\.leagueoflegends\.com/\S*?articlebanner\S*?.jpg)?\S*?\"")
 
 # Set sale text to .text attributes of saleArray elements
 for i in range(len(saleArray)):
@@ -45,8 +46,10 @@ for i in range(len(saleArray)):
     else:
         pass
 
+bannerLink = re.findall(bannerRegex, content)[0]
+
 def main():
-    postBody = format.postBody(saleArray)
+    postBody = format.postBody(saleArray, bannerLink)
     post.post(getcontent.postTitle, postBody)
     
     # Make appropriate changes to lastrun.py if post succeeds
