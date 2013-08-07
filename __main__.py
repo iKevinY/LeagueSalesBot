@@ -1,10 +1,10 @@
-import __init__
+import LeagueSalesBot
 import sys
 
 if __name__ == "__main__":
     try:
         sys.argv[1]
     except IndexError:
-        __init__.main(False)
+        LeagueSalesBot.main(False)
     else:
-        __init__.main(True)
+        LeagueSalesBot.main(True)
