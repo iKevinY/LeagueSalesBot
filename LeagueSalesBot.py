@@ -1,7 +1,7 @@
 #!/usr/local/bin/python
 # -*- coding: utf-8 -*-
 
-import os, sys, re, calendar
+import os, sys, re, calendar, datetime
 import httplib2, praw
 import settings, lastrun
 
@@ -12,25 +12,42 @@ class Skin(Sale):
 class Champ(Sale):
     isSkin = False
 
-def getContent(isTest):
-    # Load news page on League of Legends website
-    header, content = httplib2.Http().request(settings.newsPage)
+def getContent(testURL = None):
+    if testURL:
+        print "Testing URL supplied. Scraping {0}.".format(testURL)
+        header, content = httplib2.Http().request(testURL)
+        articleLink = testURL
+    else:
+        # Get string of end of last sale from lastrun.py
+        lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, "%Y-%m-%d")
 
-    # Check news page for first <h4> element with "champion-and-skin-sales" in slug
-    articleSlug, articleName = re.findall("<h4><a href=\"(.*?champion.*?skin-sale.*?)\">(.*?)</a></h4>", content)[0]
-
-    articleLink = "http://beta.na.leagueoflegends.com" + articleSlug
-
-    if articleLink == lastrun.articleLink:
-        print 'First sale is same as last posted sale. (' + articleLink + ')'
-        if isTest:
-            pass
+        # If lastrun.rotation is even, the last sale was posted on a Thursday so the next sale will start a day after the
+        # end date of the previous sale. Otherwise, the next sale will start on the same day that the last sale ended on.
+        if (lastrun.rotation % 2) == 0:
+            saleStart = lastSaleEnd + datetime.timedelta(1)
         else:
-            sys.exit(0)
+            saleStart = lastSaleEnd
+
+        # Sales always end 3 days after they start (four-day-long sales)
+        saleEnd = saleStart + datetime.timedelta(3)
+
+        # Hackish way of stripping leading zeros from months
+        saleStartString = saleStart.strftime("X%m%d").replace("X0", "").replace("X", "") # hacky
+        saleEndString = saleEnd.strftime("X%m%d").replace("X0", "").replace("X", "") # hacky
+
+        articleLink = "http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(saleStartString, saleEndString)
+
+        print "Last sale ended on {0}. Trying {1}.".format(lastrun.lastSaleEnd, articleLink)
+
+        header, content = httplib2.Http().request(articleLink)
+
+    if header.status == 404:
+        print "Page not found."
+        sys.exit(1)
     else:
         pass
 
-    articleDate = re.findall(".*?: (\d{1,2})\.(\d{1,2}) - (\d{1,2})\.(\d{1,2})", articleName)[0]
+    articleDate = re.findall("http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-(\d+)(\d{2})-(\d+)(\d{2})", articleLink)[0]
 
     startMonth = calendar.month_name[int(articleDate[0])]
     endMonth = calendar.month_name[int(articleDate[2])]
@@ -43,7 +60,7 @@ def getContent(isTest):
     else:
         postTitle = "Champion & Skin Sale (" + startMonth + " " + startDate + " – " + endMonth + " " + endDate + ")"
 
-    if isTest:
+    if testURL:
         print postTitle + "\n"
 
     header, content = httplib2.Http().request(articleLink)
@@ -116,8 +133,8 @@ def makePost(saleArray, bannerLink, articleLink):
         "^This ^bot ^was ^written ^by ^/u/Pewqazz. ^Feedback ^and ^suggestions ^are ^welcomed ^in ^/r/LeagueSalesBot."
     )
 
-def main(isTest):
-    content, postTitle, articleLink = getContent(isTest)
+def main(testURL = None):
+    content, postTitle, articleLink = getContent(testURL)
 
     saleRegex = re.compile("<ul><li>(.*?<strong>\d{3} RP</strong>)</li></ul>")
     imageRegex = re.compile("<a href=\"(http://riot-web-static\.s3\.amazonaws\.com/images/news/\S*?\.jpg)\"")
@@ -150,17 +167,22 @@ def main(isTest):
 
     postBody = makePost(saleArray, bannerLink, articleLink)
 
-    if isTest:
+    if testURL:
         print postBody
     else:
         # Post to Reddit
         r = praw.Reddit(user_agent=settings.userAgent)
         r.login(settings.username, settings.password)
         r.submit(settings.subreddit, postTitle, text=postBody)
+
+        # Format date
+        saleEnd = datetime.datetime.now()
+        saleEnd = saleEnd + datetime.timeDelta(3)
+        saleEnd = saleEnd.strftime("%Y-%m-%d")
         
         # Make appropriate changes to lastrun.py if post succeeds
         directory = os.path.dirname(os.path.abspath(__file__))
         path = os.path.join(directory, 'lastrun.py')
         f = open(path, 'r+')
-        f.write("articleLink = \"" + articleLink + "\"\n" + "rotation = " + str(lastrun.rotation + 1) + "\n")
+        f.write("lastSaleEnd = {0}".format(saleEnd))
         f.close()

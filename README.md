@@ -10,7 +10,7 @@ If you're up in arms about the fact that I have used regular expressions to pars
 There are a couple of files that this bot uses but aren't included in this Git repository: `lastrun.py` and `settings.py`. The former houses information about the last time the bot successfully posted, to keep track of what sale was most recent and also at what point in the skin sale prices rotation it is currently at.
 
     # lastrun.py
-    articleLink = "http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-806-809"
+    lastSaleEnd = "2013-08-12"
     rotation = 3
 
 `settings.py` contains information like the username and password of the bot, the user agent used, the subreddit the bot is posting to, and also what page the bot should search in order to check for a new sale.

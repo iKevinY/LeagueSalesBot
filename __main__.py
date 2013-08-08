@@ -5,6 +5,6 @@ if __name__ == "__main__":
     try:
         sys.argv[1]
     except IndexError:
-        LeagueSalesBot.main(False)
+        LeagueSalesBot.main()
     else:
-        LeagueSalesBot.main(True)
+        LeagueSalesBot.main(sys.argv[1])
