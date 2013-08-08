@@ -42,12 +42,12 @@ def getContent(testURL = None):
         header, content = httplib2.Http().request(articleLink)
 
     if header.status == 404:
-        print "Page not found."
+        print '\033[93m' + "Page not found." + '\033[0m'
         sys.exit(1)
     else:
         pass
 
-    articleDate = re.findall("http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-(\d+)(\d{2})-(\d+)(\d{2})", articleLink)[0]
+    articleDate = re.findall("http://beta\.(?:na|euw)\.leagueoflegends\.com/en/news/store/sales/champion-and-skin-sale-(\d+)(\d{2})-(\d+)(\d{2})", articleLink)[0]
 
     startMonth = calendar.month_name[int(articleDate[0])]
     endMonth = calendar.month_name[int(articleDate[2])]
@@ -61,7 +61,7 @@ def getContent(testURL = None):
         postTitle = "Champion & Skin Sale (" + startMonth + " " + startDate + " – " + endMonth + " " + endDate + ")"
 
     if testURL:
-        print postTitle + "\n"
+        print '\033[96m' + postTitle + '\033[0m'
 
     header, content = httplib2.Http().request(articleLink)
 
@@ -138,7 +138,7 @@ def main(testURL = None):
 
     saleRegex = re.compile("<ul><li>(.*?<strong>\d{3} RP</strong>)</li></ul>")
     imageRegex = re.compile("<a href=\"(http://riot-web-static\.s3\.amazonaws\.com/images/news/\S*?\.jpg)\"")
-    bannerRegex = re.compile("<img .*? src=\"(http://beta\.na\.leagueoflegends\.com/\S*?articlebanner\S*?.jpg)?\S*?\"")
+    bannerRegex = re.compile("<img .*? src=\"(http://beta\.(?:na|euw)\.leagueoflegends\.com/\S*?articlebanner\S*?.jpg)?\S*?\"")
 
     # Declare sale objects
     saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
@@ -184,5 +184,5 @@ def main(testURL = None):
         directory = os.path.dirname(os.path.abspath(__file__))
         path = os.path.join(directory, 'lastrun.py')
         f = open(path, 'r+')
-        f.write("lastSaleEnd = {0}".format(saleEnd))
+        f.write("lastSaleEnd = \"{0}\"\nrotation = {1}\n".format(saleEnd, str(lastrun.rotation + 1)))
         f.close()
