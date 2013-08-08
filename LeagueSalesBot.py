@@ -83,25 +83,25 @@ def saleOutput(sale):
         else: champName = sale.name.rsplit(' ', 1)[1]
         
         imageString = "[Splash Art](" + sale.splash + "), [In-Game](" + sale.inGame + ")"
-    else: # isSkin == False
+    else: # sale.isSkin == False
         champName = sale.name
         imageString = "[Splash Art](" + sale.splash + ")"
 
     champLink = "http://leagueoflegends.wikia.com/wiki/" + champName.replace(" ", "_")
     icon = "[](/" + champName.lower().replace(" ", "").replace(".", "").replace("'", "") + ")"
 
-    # Calculate regular price of item
+    # Calculate regular price of skin/champion
     if (sale.cost == 487) or (sale.cost == 292):
-        regularPrice = str(int(sale.cost) * 2 + 1)
+        regularPrice = sale.cost * 2 + 1
     else:
-        regularPrice = str(int(sale.cost) * 2)
+        regularPrice = sale.cost * 2
 
     return "|" + icon + "|**[" + sale.name + "](" + champLink + ")**|" + str(sale.cost) + " RP|" + str(regularPrice) + " RP|" + imageString + "|"
 
 def makePost(saleArray, bannerLink, articleLink):
     # Automate rotation of sale rotation
     rotation = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
-    nextRotation = rotation[lastrun.rotation%4]
+    nextRotation = rotation[lastrun.rotation % 4]
 
     sales = ""
     for sale in saleArray:
@@ -119,12 +119,12 @@ def makePost(saleArray, bannerLink, articleLink):
 def main(isTest):
     content, postTitle, articleLink = getContent(isTest)
 
-    # Declare sale objects
-    saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
-
     saleRegex = re.compile("<ul><li>(.*?<strong>\d{3} RP</strong>)</li></ul>")
     imageRegex = re.compile("<a href=\"(http://riot-web-static\.s3\.amazonaws\.com/images/news/\S*?\.jpg)\"")
     bannerRegex = re.compile("<img .*? src=\"(http://beta\.na\.leagueoflegends\.com/\S*?articlebanner\S*?.jpg)?\S*?\"")
+
+    # Declare sale objects
+    saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
 
     # Set sale text to .text attributes of saleArray elements
     for i in range(len(saleArray)):
