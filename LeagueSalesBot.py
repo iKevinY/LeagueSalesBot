@@ -47,20 +47,22 @@ def getContent(testURL = None):
         print "Testing URL supplied. Scraping {0}".format(testURL)
         header, content = httplib2.Http().request(testURL)
         if header.status == 404:
-            print '\033[91m' + "{0} not found. Terminating script.".format(testURL) + '\033[0m' 
+            print "\033[31m{0} not found.\033[0m Terminating script.".format(testURL) + '\033[0m' 
+            sys.exit(1)
         else:
             saleStart, saleEnd = re.findall("\S*?-(\d{3,4})-(\d{3,4})", testURL)[0]
             if ".na." in testURL:
                 naLink = testURL
                 startDate = datetime.datetime.strptime(saleStart, "%m%d")
                 endDate = datetime.datetime.strptime(saleEnd, "%m%d")
-                euwLink = "http://beta.euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(startDate.strftime("%d%-m"), endDate.strftime("%d%-m"))
+                euwLink = "http://beta.euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(
+                    startDate.strftime("%d%-m"), endDate.strftime("%d%-m"))
             elif ".euw." in testURL:
                 euwLink = testURL
                 startDate = datetime.datetime.strptime(saleStart, "%d%m")
                 endDate = datetime.datetime.strptime(saleEnd, "%d%m")
-
-                naLink = "http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(startDate.strftime("%-m%d"), endDate.strftime("%-m%d"))
+                naLink = "http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(
+                    startDate.strftime("%-m%d"), endDate.strftime("%-m%d"))
             else:
                 print "Unknown region/unrecognized URL."
                 sys.exit(1)
@@ -70,7 +72,7 @@ def getContent(testURL = None):
             else:
                 postTitle = "Champion & Skin Sale ({0} – {1})".format(startDate.strftime("%B %-d"), endDate.strftime("%B %-d"))
 
-    else:
+    else: # not testURL
         naLink, euwLink, postTitle = generateLinks()
 
         print "Last sale ended on {0}. Requesting {1}".format(lastrun.lastSaleEnd, naLink)
@@ -78,10 +80,10 @@ def getContent(testURL = None):
 
         # Tries the EU-W page if the NA page does not exist
         if header.status == 404:
-            print '\033[91m' + "NA page not found. " + '\033[0m' + 'Requesting EU-W page: ' + euwLink
+            print '\033[31m' + "NA page not found. " + '\033[0m' + 'Requesting EU-W page: ' + euwLink
             header, content = httplib2.Http().request(euwLink)
             if header.status == 404:
-                print '\033[91m' + "EU-W page not found. " + '\033[0m' + "Terminating script."
+                print '\033[31m' + "EU-W page not found. " + '\033[0m' + "Terminating script."
                 sys.exit(1)
             else:
                 pass
@@ -89,7 +91,7 @@ def getContent(testURL = None):
             pass
 
     if testURL:
-        print '\033[96m' + postTitle + '\033[0m'
+        print '\033[36m' + postTitle + '\033[0m'
 
     return content, postTitle, naLink, euwLink
 
@@ -202,13 +204,14 @@ def main(testURL = None):
         r.submit(settings.subreddit, postTitle, text=postBody)
 
         # Format date
-        saleEnd = datetime.datetime.now()
-        saleEnd = saleEnd + datetime.timeDelta(3)
-        saleEnd = saleEnd.strftime("%Y-%m-%d")
+        saleEnd = datetime.datetime.now() + datetime.timedelta(3)
+        saleEndText = saleEnd.strftime("%Y-%m-%d")
         
         # Make appropriate changes to lastrun.py if post succeeds
         directory = os.path.dirname(os.path.abspath(__file__))
         path = os.path.join(directory, 'lastrun.py')
         f = open(path, 'r+')
-        f.write("lastSaleEnd = \"{0}\"\nrotation = {1}\n".format(saleEnd, str(lastrun.rotation + 1)))
+        f.write("lastSaleEnd = \"{0}\"\nrotation = {1}\n".format(saleEndText, str(lastrun.rotation + 1)))
         f.close()
+
+        sys.exit(0)
