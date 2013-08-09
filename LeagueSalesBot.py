@@ -52,7 +52,7 @@ def getContent(testURL = None):
             print '\033[91m' + "NA page not found. " + '\033[0m' + 'Looking for page on EU-W.'
 
             saleStartString = saleStart.strftime("%d%-m")
-            saleEndString =     saleEnd.strftime("%d%-m")
+            saleEndString = saleEnd.strftime("%d%-m")
 
             articleLink = "http://beta.euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(saleStartString, saleEndString)
 
@@ -61,7 +61,7 @@ def getContent(testURL = None):
             header, content = httplib2.Http().request(articleLink)
 
             if header.status == 404:
-                print '\033[91m' + "EU-W page not found. Terminating script." + '\033[0m' 
+                print '\033[91m' + "EU-W page not found. " + '\033[0m' + "Terminating script."
                 sys.exit(1)
             else:
                 pass
@@ -161,7 +161,7 @@ def makePost(saleArray, bannerLink, articleLink, startDate, endDate):
         "|:----:|:-------------:|:----------:|:-------------:|:------:|\n" +
         sales +
         "Next skin sale: **{0} RP, {1} RP, {2} RP**. ".format(nextRotation[0], nextRotation[1], nextRotation[2]) +
-        "Link to source post ([NA]({0}), [EU-W]({1})) and [sale banner]({1}).".format(naLink, euwLink, bannerLink) + "\n\n----\n" +
+        "Link to source post ([NA]({0}), [EU-W]({1})) and [sale banner]({2}).".format(naLink, euwLink, bannerLink) + "\n\n----\n" +
         "^This ^bot ^was ^written ^by ^/u/Pewqazz. ^Feedback ^and ^suggestions ^are ^welcomed ^in ^/r/LeagueSalesBot."
     )
 
