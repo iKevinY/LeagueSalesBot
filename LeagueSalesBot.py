@@ -13,53 +13,73 @@ class Skin(Sale):
 class Champ(Sale):
     isSkin = False
 
+def generateLinks():
+    # Get string of end of last sale from lastrun.py
+    lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, "%Y-%m-%d")
+
+    # If lastrun.rotation is even, the last sale was posted on a Thursday so the next sale will start a day after the
+    # end date of the previous sale. Otherwise, the next sale will start on the same day that the last sale ended on.
+    if (lastrun.rotation % 2) == 0:
+        saleStart = lastSaleEnd + datetime.timedelta(1)
+    else:
+        saleStart = lastSaleEnd
+
+    # Sales always end 3 days after they start (four-day-long sales)
+    saleEnd = saleStart + datetime.timedelta(3)
+
+    naStartDate = saleStart.strftime("%-m%d")
+    naEndDate = saleEnd.strftime("%-m%d")
+    naLink = "http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(naStartDate, naEndDate)
+
+    euwStartDate = saleStart.strftime("%d%-m")
+    euwEndDate = saleEnd.strftime("%d%-m")
+    euwLink = "http://beta.euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(euwStartDate, euwEndDate)
+
+    if saleStart.month == saleEnd.month:
+        postTitle = "Champion & Skin Sale ({0}–{1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
+    else:
+        postTitle = "Champion & Skin Sale ({0} – {1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
+
+    return naLink, euwLink, postTitle
+
 def getContent(testURL = None):
     if testURL:
-        print "Testing URL supplied. Scraping {0}.".format(testURL)
+        print "Testing URL supplied. Scraping {0}".format(testURL)
         header, content = httplib2.Http().request(testURL)
-        articleLink = testURL
         if header.status == 404:
-            print '\033[91m' + "{0} not found. Terminating script.".format(articleLink) + '\033[0m' 
+            print '\033[91m' + "{0} not found. Terminating script.".format(testURL) + '\033[0m' 
         else:
-            pass
+            saleStart, saleEnd = re.findall("\S*?-(\d{3,4})-(\d{3,4})", testURL)[0]
+            if ".na." in testURL:
+                naLink = testURL
+                startDate = datetime.datetime.strptime(saleStart, "%m%d")
+                endDate = datetime.datetime.strptime(saleEnd, "%m%d")
+                euwLink = "http://beta.euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(startDate.strftime("%d%-m"), endDate.strftime("%d%-m"))
+            elif ".euw." in testURL:
+                euwLink = testURL
+                startDate = datetime.datetime.strptime(saleStart, "%d%m")
+                endDate = datetime.datetime.strptime(saleEnd, "%d%m")
+
+                naLink = "http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(startDate.strftime("%-m%d"), endDate.strftime("%-m%d"))
+            else:
+                print "Unknown region/unrecognized URL."
+                sys.exit(1)
+
+            if startDate.month == endDate.month:
+                postTitle = "Champion & Skin Sale ({0}–{1})".format(startDate.strftime("%B %-d"), endDate.strftime("%-d"))
+            else:
+                postTitle = "Champion & Skin Sale ({0} – {1})".format(startDate.strftime("%B %-d"), endDate.strftime("%B %-d"))
 
     else:
-        # Get string of end of last sale from lastrun.py
-        lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, "%Y-%m-%d")
+        naLink, euwLink, postTitle = generateLinks()
 
-        # If lastrun.rotation is even, the last sale was posted on a Thursday so the next sale will start a day after the
-        # end date of the previous sale. Otherwise, the next sale will start on the same day that the last sale ended on.
-        if (lastrun.rotation % 2) == 0:
-            saleStart = lastSaleEnd + datetime.timedelta(1)
-        else:
-            saleStart = lastSaleEnd
+        print "Last sale ended on {0}. Requesting {1}".format(lastrun.lastSaleEnd, naLink)
+        header, content = httplib2.Http().request(naLink)
 
-        # Sales always end 3 days after they start (four-day-long sales)
-        saleEnd = saleStart + datetime.timedelta(3)
-
-        # Strip leading zeros from months
-        saleStartString = saleStart.strftime("%-m%d")
-        saleEndString =     saleEnd.strftime("%-m%d")
-
-        articleLink = "http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(saleStartString, saleEndString)
-
-        print "Last sale ended on {0}. Requesting {1}".format(lastrun.lastSaleEnd, articleLink)
-
-        header, content = httplib2.Http().request(articleLink)
-
-        # Yes, ugly code. Needs refactoring.
+        # Tries the EU-W page if the NA page does not exist
         if header.status == 404:
-            print '\033[91m' + "NA page not found. " + '\033[0m' + 'Looking for page on EU-W.'
-
-            saleStartString = saleStart.strftime("%d%-m")
-            saleEndString = saleEnd.strftime("%d%-m")
-
-            articleLink = "http://beta.euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(saleStartString, saleEndString)
-
-            print "Last sale ended on {0}. Requesting {1}".format(lastrun.lastSaleEnd, articleLink)
-
-            header, content = httplib2.Http().request(articleLink)
-
+            print '\033[91m' + "NA page not found. " + '\033[0m' + 'Requesting EU-W page: ' + euwLink
+            header, content = httplib2.Http().request(euwLink)
             if header.status == 404:
                 print '\033[91m' + "EU-W page not found. " + '\033[0m' + "Terminating script."
                 sys.exit(1)
@@ -68,27 +88,10 @@ def getContent(testURL = None):
         else:
             pass
 
-    articleDate = re.findall("http://beta\.(?:na|euw)\.leagueoflegends\.com/en/news/store/sales/champion-and-skin-sale-(\d{3,4})-(\d{3,4})", articleLink)[0]
-
-    if ".na." in articleLink:
-        startDate = datetime.datetime.strptime(articleDate[0], "%m%d")
-        endDate = datetime.datetime.strptime(articleDate[1], "%m%d")
-
-    elif ".euw." in articleLink:
-        startDate = datetime.datetime.strptime(articleDate[0], "%d%m")
-        endDate = datetime.datetime.strptime(articleDate[1], "%d%m")
-
-    if startDate.month == endDate.month:
-        postTitle = "Champion & Skin Sale ({0}–{1})".format(startDate.strftime("%B %-d"), endDate.strftime("%-d"))
-    else:
-        postTitle = "Champion & Skin Sale ({0} – {1})".format(startDate.strftime("%B %-d"), endDate.strftime("%B %-d"))
-
     if testURL:
         print '\033[96m' + postTitle + '\033[0m'
 
-    header, content = httplib2.Http().request(articleLink)
-
-    return content, postTitle, articleLink, startDate, endDate
+    return content, postTitle, naLink, euwLink
 
 def saleOutput(sale):
     if sale.isSkin == True:
@@ -138,35 +141,26 @@ def saleOutput(sale):
 
     return "|" + icon + "|**[" + sale.name + "](" + champLink + ")**|" + str(sale.cost) + " RP|" + str(regularPrice) + " RP|" + imageString + "|"
 
-def makePost(saleArray, bannerLink, articleLink, startDate, endDate):
+def makePost(saleArray, bannerLink, naLink, euwLink):
     # Automate rotation of sale rotation
-    rotation = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
-    nextRotation = rotation[lastrun.rotation % 4]
+    rotationSchedule = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
+    nextRotation = rotationSchedule[lastrun.rotation % 4]
 
     sales = ""
     for sale in saleArray:
         sales = sales + saleOutput(sale) + "\n"
-
-    naStartDate = startDate.strftime("%-m%d")
-    euwStartDate = startDate.strftime("%d%-m")
-
-    naEndDate = endDate.strftime("%-m%d")
-    euwEndDate = endDate.strftime("%d%-m")
-
-    naLink = "http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(naStartDate, naEndDate)
-    euwLink = "http://beta.euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(euwStartDate, euwEndDate)
 
     return (
         "| Icon | Skin/Champion | Sale Price | Regular Price | Images |\n" +
         "|:----:|:-------------:|:----------:|:-------------:|:------:|\n" +
         sales +
         "Next skin sale: **{0} RP, {1} RP, {2} RP**. ".format(nextRotation[0], nextRotation[1], nextRotation[2]) +
-        "Link to source post ([NA]({0}), [EU-W]({1})) and [sale banner]({2}).".format(naLink, euwLink, bannerLink) + "\n\n----\n" +
+        "Link to sale pages ([NA]({0}), [EU-W]({1})) and [banner image]({2}).".format(naLink, euwLink, bannerLink) + "\n\n----\n" +
         "^This ^bot ^was ^written ^by ^/u/Pewqazz. ^Feedback ^and ^suggestions ^are ^welcomed ^in ^/r/LeagueSalesBot."
     )
 
 def main(testURL = None):
-    content, postTitle, articleLink, startDate, endDate = getContent(testURL)
+    content, postTitle, naLink, euwLink = getContent(testURL)
 
     saleRegex = re.compile("<ul><li>(.*?<strong>\d{3} RP</strong>)</li></ul>")
     imageRegex = re.compile("<a href=\"(http://riot-web-static\.s3\.amazonaws\.com/images/news/\S*?\.jpg)\"")
@@ -197,7 +191,7 @@ def main(testURL = None):
 
     bannerLink = re.findall(bannerRegex, content)[0]
 
-    postBody = makePost(saleArray, bannerLink, articleLink, startDate, endDate)
+    postBody = makePost(saleArray, bannerLink, naLink, euwLink)
 
     if testURL:
         print postBody
