@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#! /usr/bin/python
 # -*- coding: utf-8 -*-
 
 import os, sys, re, datetime
@@ -15,6 +15,7 @@ class Champ(Sale):
 
 # Keywords for ANSI-coloured terminal messages
 kWarning = '\033[31m'
+kSuccess = '\033[32m'
 kSpecial = '\033[36m'
 kReset = '\033[0m'
 
@@ -53,18 +54,15 @@ def getContent(testURL = None):
         try:
             header, content = httplib2.Http().request(testURL)
         except httplib2.ServerNotFoundError:
-            print kWarning + "Connection error. " + kReset + "Terminating script."
-            sys.exit(1)
+            sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
 
         if header.status == 404:
-            print kWarning + "{0} not found. ".format(testURL) + kReset + "Terminating script."
-            sys.exit(1)
+            sys.exit(kWarning + "{0} not found. ".format(testURL) + kReset + "Terminating script.")
         else:
             try:
                 saleStart, saleEnd = re.findall("http://beta\.(?:na|euw)\.leagueoflegends\.com/\S*?-(\d{3,4})-(\d{3,4})", testURL)[0]
             except IndexError:
-                print "Unknown region/unrecognized URL."
-                sys.exit(1)
+                sys.exit(kWarning + "Unknown region/unrecognized URL." + kReset)
             else:
                 pass
 
@@ -94,16 +92,18 @@ def getContent(testURL = None):
         try:
             header, content = httplib2.Http().request(naLink)
         except httplib2.ServerNotFoundError:
-            print kWarning + "Connection error. " + kReset + "Terminating script."
-            sys.exit(1)
+            sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
 
         # Tries the EU-W page if the NA page does not exist
         if header.status == 404:
             print kWarning + "NA page not found. " + kReset + "Requesting EU-W page: " + euwLink
-            header, content = httplib2.Http().request(euwLink)
+            try:
+                header, content = httplib2.Http().request(euwLink)
+            except httplib2.ServerNotFoundError:
+                sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
+            
             if header.status == 404:
-                print kWarning + "EU-W page not found. " + kReset + "Terminating script."
-                sys.exit(1)
+                sys.exit(kWarning + "EU-W page not found. " + kReset + "Terminating script.")
             else:
                 pass
         else:
@@ -217,22 +217,30 @@ def main(testURL = None):
 
     if testURL:
         print postBody
-        sys.exit(0)
-    else:
-        # Post to Reddit (first /r/leagueoflegends, and then /r/LeagueSalesBot for archival purposes)
-        r = praw.Reddit(user_agent=settings.userAgent)
-        r.login(settings.username, settings.password)
-        r.submit("leagueoflegends", postTitle, text=postBody)
-        r.submit("LeagueSalesBot", postTitle, text=postBody)
+        prompt = raw_input("Post to Reddit? (Y/N) ")
+        if prompt == "Y" or prompt == "y":
+            pass
+        else:
+            print kWarning + "Did not post to Reddit." + kReset
+            sys.exit(0)
 
-        # Format date
-        saleEndText = (datetime.datetime.now() + datetime.timedelta(3)).strftime("%Y-%m-%d")
-        
-        # Make appropriate changes to lastrun.py if post succeeds
-        directory = os.path.dirname(os.path.abspath(__file__))
-        path = os.path.join(directory, 'lastrun.py')
-        f = open(path, 'r+')
-        f.write("lastSaleEnd = \"{0}\"\nrotation = {1}\n".format(saleEndText, str(lastrun.rotation + 1)))
-        f.close()
+    # Post to Reddit (first /r/leagueoflegends, and then /r/LeagueSalesBot for archival purposes)
+    r = praw.Reddit(user_agent=settings.userAgent)
+    r.login(settings.username, settings.password)
+    r.submit("leagueoflegends", postTitle, text=postBody)
+    r.submit("LeagueSalesBot", postTitle, text=postBody)
 
-        sys.exit(0)
+    print kSuccess + "Posted to Reddit." + kReset
+    
+    # Make appropriate changes to lastrun.py if post succeeds
+    saleEndText = (datetime.datetime.now() + datetime.timedelta(3)).strftime("%Y-%m-%d")
+
+    directory = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(directory, 'lastrun.py')
+    f = open(path, 'r+')
+    f.write("lastSaleEnd = \"{0}\"\nrotation = {1}\n".format(saleEndText, str(lastrun.rotation + 1)))
+    f.close()
+
+    print kSuccess + "Updated lastrun.py successfully." + kReset
+
+    sys.exit(0)
