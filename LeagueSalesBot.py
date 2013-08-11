@@ -13,6 +13,11 @@ class Skin(Sale):
 class Champ(Sale):
     isSkin = False
 
+# Keywords for ANSI-coloured terminal messages
+kWarning = '\033[31m'
+kSpecial = '\033[36m'
+kReset = '\033[0m'
+
 def generateLinks():
     # Get string of end of last sale from lastrun.py
     lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, "%Y-%m-%d")
@@ -44,13 +49,25 @@ def generateLinks():
 
 def getContent(testURL = None):
     if testURL:
-        print "Testing URL supplied. Scraping {0}".format(testURL)
-        header, content = httplib2.Http().request(testURL)
+        print "Test URL provided. Scraping {0}".format(testURL)
+        try:
+            header, content = httplib2.Http().request(testURL)
+        except httplib2.ServerNotFoundError:
+            print kWarning + "Connection error. " + kReset + "Terminating script."
+            sys.exit(1)
+
         if header.status == 404:
-            print "\033[31m{0} not found.\033[0m Terminating script.".format(testURL) + '\033[0m' 
+            print kWarning + "{0} not found. ".format(testURL) + kReset + "Terminating script."
             sys.exit(1)
         else:
-            saleStart, saleEnd = re.findall("\S*?-(\d{3,4})-(\d{3,4})", testURL)[0]
+            try:
+                saleStart, saleEnd = re.findall("http://beta\.(?:na|euw)\.leagueoflegends\.com/\S*?-(\d{3,4})-(\d{3,4})", testURL)[0]
+            except IndexError:
+                print "Unknown region/unrecognized URL."
+                sys.exit(1)
+            else:
+                pass
+
             if ".na." in testURL:
                 naLink = testURL
                 startDate = datetime.datetime.strptime(saleStart, "%m%d")
@@ -63,9 +80,6 @@ def getContent(testURL = None):
                 endDate = datetime.datetime.strptime(saleEnd, "%d%m")
                 naLink = "http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(
                     startDate.strftime("%-m%d"), endDate.strftime("%-m%d"))
-            else:
-                print "Unknown region/unrecognized URL."
-                sys.exit(1)
 
             if startDate.month == endDate.month:
                 postTitle = "Champion & Skin Sale ({0}–{1})".format(startDate.strftime("%B %-d"), endDate.strftime("%-d"))
@@ -74,16 +88,21 @@ def getContent(testURL = None):
 
     else: # not testURL
         naLink, euwLink, postTitle = generateLinks()
-
+        
         print "Last sale ended on {0}. Requesting {1}".format(lastrun.lastSaleEnd, naLink)
-        header, content = httplib2.Http().request(naLink)
+
+        try:
+            header, content = httplib2.Http().request(naLink)
+        except httplib2.ServerNotFoundError:
+            print kWarning + "Connection error. " + kReset + "Terminating script."
+            sys.exit(1)
 
         # Tries the EU-W page if the NA page does not exist
         if header.status == 404:
-            print '\033[31m' + "NA page not found. " + '\033[0m' + 'Requesting EU-W page: ' + euwLink
+            print kWarning + "NA page not found. " + kReset + "Requesting EU-W page: " + euwLink
             header, content = httplib2.Http().request(euwLink)
             if header.status == 404:
-                print '\033[31m' + "EU-W page not found. " + '\033[0m' + "Terminating script."
+                print kWarning + "EU-W page not found. " + kReset + "Terminating script."
                 sys.exit(1)
             else:
                 pass
@@ -91,7 +110,7 @@ def getContent(testURL = None):
             pass
 
     if testURL:
-        print '\033[36m' + postTitle + '\033[0m'
+        print kSpecial + postTitle + kReset
 
     return content, postTitle, naLink, euwLink
 
@@ -133,7 +152,8 @@ def saleOutput(sale):
         imageString = "[Splash Art](" + sale.splash + ")"
 
     champLink = "http://leagueoflegends.wikia.com/wiki/" + champName.replace(" ", "_")
-    icon = "[](/" + champName.lower().replace(" ", "").replace(".", "").replace("'", "") + ")"
+    iconName = re.sub('\ |\.|\'', '', champName.lower())
+    icon = "[](/{0})".format(iconName)
 
     # Calculate regular price of skin/champion
     if (sale.cost == 487) or (sale.cost == 292):
@@ -164,7 +184,7 @@ def makePost(saleArray, bannerLink, naLink, euwLink):
 def main(testURL = None):
     content, postTitle, naLink, euwLink = getContent(testURL)
 
-    saleRegex = re.compile("<ul><li>(.*?<strong>\d{3} RP</strong>)</li></ul>")
+    saleRegex = re.compile("<ul><li>(.*?<strong>\d{3,4} RP</strong>)</li></ul>")
     imageRegex = re.compile("<a href=\"(http://riot-web-static\.s3\.amazonaws\.com/images/news/\S*?\.jpg)\"")
     bannerRegex = re.compile("<img .*? src=\"(http://beta\.(?:na|euw)\.leagueoflegends\.com/\S*?articlebanner\S*?.jpg)?\S*?\"")
 
@@ -197,15 +217,16 @@ def main(testURL = None):
 
     if testURL:
         print postBody
+        sys.exit(0)
     else:
-        # Post to Reddit
+        # Post to Reddit (first /r/leagueoflegends, and then /r/LeagueSalesBot for archival purposes)
         r = praw.Reddit(user_agent=settings.userAgent)
         r.login(settings.username, settings.password)
-        r.submit(settings.subreddit, postTitle, text=postBody)
+        r.submit("leagueoflegends", postTitle, text=postBody)
+        r.submit("LeagueSalesBot", postTitle, text=postBody)
 
         # Format date
-        saleEnd = datetime.datetime.now() + datetime.timedelta(3)
-        saleEndText = saleEnd.strftime("%Y-%m-%d")
+        saleEndText = (datetime.datetime.now() + datetime.timedelta(3)).strftime("%Y-%m-%d")
         
         # Make appropriate changes to lastrun.py if post succeeds
         directory = os.path.dirname(os.path.abspath(__file__))
