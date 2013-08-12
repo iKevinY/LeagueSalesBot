@@ -55,7 +55,7 @@ def getContent(testURL = None):
             header, content = httplib2.Http().request(testURL)
         except httplib2.ServerNotFoundError:
             sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
-
+            
         if header.status == 404:
             sys.exit(kWarning + "{0} not found. ".format(testURL) + kReset + "Terminating script.")
         else:
@@ -86,9 +86,7 @@ def getContent(testURL = None):
 
     else: # not testURL
         naLink, euwLink, postTitle = generateLinks()
-        
         print "Last sale ended on {0}. Requesting {1}".format(lastrun.lastSaleEnd, naLink)
-
         try:
             header, content = httplib2.Http().request(naLink)
         except httplib2.ServerNotFoundError:
@@ -194,7 +192,19 @@ def main(testURL = None):
     # Set sale text to .text attributes of saleArray elements
     for i in range(len(saleArray)):
         # Clean the "Â" character from end of sale names
-        saleArray[i].text = unicode(re.findall(saleRegex, content)[i], "utf-8")
+        try:
+            saleArray[i].text = unicode(re.findall(saleRegex, content)[i], "utf-8")
+        except IndexError:
+            # This occurs when the sale was posted recently and the page is formatted differently
+            # from how it normally is.
+            fileName = datetime.datetime.now().strftime("%H.%M.%S") + ".txt"
+            directory = os.path.dirname(os.path.abspath(__file__))
+            path = os.path.join(directory, 'logs/' + fileName)
+            f = open(path, 'w')
+            f.write(content)
+            f.close()
+
+            sys.exit(kWarning + "Page is not formatted correctly. " + kReset + "Wrote page content to " + fileName)
 
         text = (re.sub('<.*?>', '', saleArray[i].text))
 
