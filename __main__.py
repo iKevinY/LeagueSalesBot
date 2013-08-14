@@ -7,4 +7,7 @@ if __name__ == "__main__":
     except IndexError:
         LeagueSalesBot.main()
     else:
-        LeagueSalesBot.main(sys.argv[1])
+        if sys.argv[1] == "-m":
+            LeagueSalesBot.manualPost()
+        else:
+            LeagueSalesBot.main(sys.argv[1])

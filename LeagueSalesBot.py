@@ -167,12 +167,12 @@ def makePost(saleArray, bannerLink, naLink, euwLink):
     nextRotation = rotationSchedule[lastrun.rotation % 4]
 
     faqArray = [
-    ("I recently bought one of these items.",
-        "If you made the purchase recently (within the past two weeks), you can [open a support ticket](https://support.leagueoflegends.com/anonymous_requests/new) and have the difference refunded."),
+    ("I recently bought one of these skins/champions.",
+        "If you made the purchase within the past two weeks, you can [open a support ticket](https://support.leagueoflegends.com/anonymous_requests/new) and have the difference refunded."),
     ("How do you know the prices of the next skin sale?",
         "The skin sales now follow a [four-stage rotation](http://forums.na.leagueoflegends.com/board/showthread.php?t=3651816). In addition to this skin rotation, all champion sales will contain a 975 RP, 880 RP, and 790 RP or lower champion."),
     ("What will skins and champions will be on sale next?",
-        "Unfortunately, /u/LeagueSalesBot is a Reddit bot, not a psychic. However, Jagz has created a [spreadsheet](https://docs.google.com/spreadsheet/lv?key=0AgTL8IK0A37pdHB2MmNfVG93enV2SnpJeHhxTHhZcUE) with information regarding what skins are due to  go on sale sometime soon."),
+        "Unfortunately, /u/LeagueSalesBot is a Reddit bot, not a psychic. However, Jagz has created a [spreadsheet](https://docs.google.com/spreadsheet/lv?key=0AgTL8IK0A37pdHB2MmNfVG93enV2SnpJeHhxTHhZcUE) with information regarding what skins and champions are due to go on sale in the near future."),
     ("How does this bot work?",
         "The bot is written in [Python](http://www.python.org/) and uses the [PRAW](https://praw.readthedocs.org/en/latest/) library. It monitors the League of Legends website for a new champion & skin sale; if it finds one, it parses the information on the page and formats it into a Reddit post.")
     ]
@@ -194,6 +194,90 @@ def makePost(saleArray, bannerLink, naLink, euwLink):
         "### Frequently Asked Questions\n\n" + faq + '----\n'
         "^This ^bot ^was ^written ^by ^/u/Pewqazz. ^Feedback ^and ^suggestions ^are ^welcomed ^in ^/r/LeagueSalesBot."
     )
+
+def submitPost(postTitle, postBody):
+    # Post to Reddit (first /r/leagueoflegends, and then /r/LeagueSalesBot for archival purposes)
+    r = praw.Reddit(user_agent=settings.userAgent)
+    r.login(settings.username, settings.password)
+    r.submit("leagueoflegends", postTitle, text=postBody)
+    r.submit("LeagueSalesBot", postTitle, text=postBody)
+
+    print kSuccess + "Posted to Reddit." + kReset
+    
+    # Make appropriate changes to lastrun.py if post succeeds
+    saleEndText = (datetime.datetime.now() + datetime.timedelta(4)).strftime("%Y-%m-%d")
+
+    directory = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(directory, 'lastrun.py')
+    f = open(path, 'r+')
+    f.write("lastSaleEnd = \"{0}\"\nrotation = {1}\n".format(saleEndText, str(lastrun.rotation + 1)))
+    f.close()
+
+    print kSuccess + "Updated lastrun.py successfully." + kReset
+
+def manualPost():
+    saleStart = datetime.datetime.strptime(raw_input("Enter sale starting date (MMDD): "), "%m%d")
+    saleEnd = datetime.datetime.strptime(raw_input("Enter sale ending date (MMDD): "), "%m%d")
+
+    naStartDate = saleStart.strftime("%-m%d")
+    naEndDate = saleEnd.strftime("%-m%d")
+    naLink = "http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(naStartDate, naEndDate)
+
+    euwStartDate = saleStart.strftime("%d%-m")
+    euwEndDate = saleEnd.strftime("%d%-m")
+    euwLink = "http://beta.euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(euwStartDate, euwEndDate)
+
+    if saleStart.month == saleEnd.month:
+        postTitle = "Champion & Skin Sale ({0}–{1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
+    else:
+        postTitle = "Champion & Skin Sale ({0} – {1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
+
+    saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
+
+    print kSpecial + postTitle + kReset
+
+    # Skins
+    for sale in saleArray:
+        if sale.__class__ is Skin:
+            print "Skin #{0}:".format(saleArray.index(sale)+1)
+        else:
+            print "Champion #{0}:".format(saleArray.index(sale)-2)
+
+        sale.name = raw_input("Name: ")
+        sale.cost = int(raw_input("Sale price: "))
+        sale.splash = raw_input("Splash URL: ")
+        if not sale.splash:
+            sale.splash = "##"
+            
+        if sale.__class__ is Skin:
+            sale.inGame = raw_input("In-game screenshot URL: ")
+            if not sale.inGame:
+                sale.inGame = "##"
+        print "\n"
+
+    bannerLink = raw_input("Enter URL of banner link: ")
+    if not bannerLink:
+        bannerLink = "##"
+
+    postBody = makePost(saleArray, bannerLink, naLink, euwLink)
+
+    print postBody
+    prompt = raw_input("Post to Reddit? (Y/N) ")
+    if prompt == "Y" or prompt == "y":
+        prompt = raw_input("Confirm? (Y/N) ")
+        if prompt == "Y" or prompt == "y":
+            pass
+        else:
+            print kWarning + "Did not post to Reddit." + kReset
+            sys.exit(0)
+    else:
+        print kWarning + "Did not post to Reddit." + kReset
+        sys.exit(0)
+
+    submitPost(postTitle, postBody)
+
+    sys.exit(0)
+
 
 def main(testURL = None):
     content, postTitle, naLink, euwLink = getContent(testURL)
@@ -256,23 +340,6 @@ def main(testURL = None):
             print kWarning + "Did not post to Reddit." + kReset
             sys.exit(0)
 
-    # Post to Reddit (first /r/leagueoflegends, and then /r/LeagueSalesBot for archival purposes)
-    r = praw.Reddit(user_agent=settings.userAgent)
-    r.login(settings.username, settings.password)
-    r.submit("leagueoflegends", postTitle, text=postBody)
-    r.submit("LeagueSalesBot", postTitle, text=postBody)
-
-    print kSuccess + "Posted to Reddit." + kReset
-    
-    # Make appropriate changes to lastrun.py if post succeeds
-    saleEndText = (datetime.datetime.now() + datetime.timedelta(4)).strftime("%Y-%m-%d")
-
-    directory = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(directory, 'lastrun.py')
-    f = open(path, 'r+')
-    f.write("lastSaleEnd = \"{0}\"\nrotation = {1}\n".format(saleEndText, str(lastrun.rotation + 1)))
-    f.close()
-
-    print kSuccess + "Updated lastrun.py successfully." + kReset
+    submitPost(postTitle, postBody)
 
     sys.exit(0)
