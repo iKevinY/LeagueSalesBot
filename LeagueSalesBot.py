@@ -166,6 +166,21 @@ def makePost(saleArray, bannerLink, naLink, euwLink):
     rotationSchedule = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
     nextRotation = rotationSchedule[lastrun.rotation % 4]
 
+    faqArray = [
+    ("I recently bought one of these items.",
+        "If you made the purchase recently (within the past two weeks), you can [open a support ticket](https://support.leagueoflegends.com/anonymous_requests/new) and have the difference refunded."),
+    ("How do you know the prices of the next skin sale?",
+        "The skin sales now follow a [four-stage rotation](http://forums.na.leagueoflegends.com/board/showthread.php?t=3651816). In addition to this skin rotation, all champion sales will contain a 975 RP, 880 RP, and 790 RP or lower champion."),
+    ("What will skins and champions will be on sale next?",
+        "Unfortunately, /u/LeagueSalesBot is a Reddit bot, not a psychic. However, Jagz has created a [spreadsheet](https://docs.google.com/spreadsheet/lv?key=0AgTL8IK0A37pdHB2MmNfVG93enV2SnpJeHhxTHhZcUE) with information regarding what skins are due to  go on sale sometime soon."),
+    ("How does this bot work?",
+        "The bot is written in [Python](http://www.python.org/) and uses the [PRAW](https://praw.readthedocs.org/en/latest/) library. It monitors the League of Legends website for a new champion & skin sale; if it finds one, it parses the information on the page and formats it into a Reddit post.")
+    ]
+
+    faq = ""
+    for q in faqArray:
+        faq = faq + "> **{0}**".format(q[0]) + "\n\n" + "{0}".format(q[1]) + "\n\n"
+
     sales = ""
     for sale in saleArray:
         sales = sales + saleOutput(sale) + "\n"
@@ -173,9 +188,10 @@ def makePost(saleArray, bannerLink, naLink, euwLink):
     return (
         "| Icon | Skin/Champion | Sale Price | Regular Price | Images |\n" +
         "|:----:|:-------------:|:----------:|:-------------:|:------:|\n" +
-        sales +
+        sales + '\n'
         "Next skin sale: **{0} RP, {1} RP, {2} RP**. ".format(nextRotation[0], nextRotation[1], nextRotation[2]) +
-        "Link to sale pages ([NA]({0}), [EU-W]({1})) and [banner image]({2}).".format(naLink, euwLink, bannerLink) + "\n\n----\n" +
+        "Link to sale pages ([NA]({0}), [EUW]({1})) and [banner image]({2}).".format(naLink, euwLink, bannerLink) + '\n\n----\n\n' +
+        "### Frequently Asked Questions\n\n" + faq + '----\n'
         "^This ^bot ^was ^written ^by ^/u/Pewqazz. ^Feedback ^and ^suggestions ^are ^welcomed ^in ^/r/LeagueSalesBot."
     )
 
@@ -196,7 +212,7 @@ def main(testURL = None):
             saleArray[i].text = unicode(re.findall(saleRegex, content)[i], "utf-8")
         except IndexError:
             # This occurs when the sale was posted recently and the page is formatted differently
-            # from how it normally is.
+            # from how it normally is. This is where we run into issues.
             fileName = datetime.datetime.now().strftime("%H.%M.%S") + ".txt"
             directory = os.path.dirname(os.path.abspath(__file__))
             path = os.path.join(directory, 'logs/' + fileName)
@@ -204,7 +220,8 @@ def main(testURL = None):
             f.write(content)
             f.close()
 
-            sys.exit(kWarning + "Page is not formatted correctly. " + kReset + "Wrote page content to " + fileName)
+            print kWarning + "Page is not formatted correctly. " + kReset + "Wrote page content to " + fileName
+            sys.exit(2)
 
         text = (re.sub('<.*?>', '', saleArray[i].text))
 
@@ -229,7 +246,12 @@ def main(testURL = None):
         print postBody
         prompt = raw_input("Post to Reddit? (Y/N) ")
         if prompt == "Y" or prompt == "y":
-            pass
+            prompt = raw_input("Confirm? (Y/N) ")
+            if prompt == "Y" or prompt == "y":
+                pass
+            else:
+                print kWarning + "Did not post to Reddit." + kReset
+                sys.exit(0)
         else:
             print kWarning + "Did not post to Reddit." + kReset
             sys.exit(0)
@@ -243,7 +265,7 @@ def main(testURL = None):
     print kSuccess + "Posted to Reddit." + kReset
     
     # Make appropriate changes to lastrun.py if post succeeds
-    saleEndText = (datetime.datetime.now() + datetime.timedelta(3)).strftime("%Y-%m-%d")
+    saleEndText = (datetime.datetime.now() + datetime.timedelta(4)).strftime("%Y-%m-%d")
 
     directory = os.path.dirname(os.path.abspath(__file__))
     path = os.path.join(directory, 'lastrun.py')
