@@ -19,6 +19,16 @@ kSuccess = '\033[32m'
 kSpecial = '\033[36m'
 kReset = '\033[0m'
 
+def logForbidden(content):
+    fileName = datetime.datetime.now().strftime("%H.%M.%S") + "-403.html"
+    directory = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(directory, 'logs/' + fileName)
+    f = open(path, 'w')
+    f.write(content)
+    f.close()
+    print kWarning + "403 forbidden. " + kReset + "Wrote page content to " + fileName
+    sys.exit(403)
+
 def generateLinks():
     # Get string of end of last sale from lastrun.py
     lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, "%Y-%m-%d")
@@ -33,20 +43,21 @@ def generateLinks():
     # Sales always end 3 days after they start (four-day-long sales)
     saleEnd = saleStart + datetime.timedelta(3)
 
-    naStartDate = saleStart.strftime("%-m%d")
-    naEndDate = saleEnd.strftime("%-m%d")
-    naLink = "http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(naStartDate, naEndDate)
-
-    euwStartDate = saleStart.strftime("%d%-m")
-    euwEndDate = saleEnd.strftime("%d%-m")
-    euwLink = "http://beta.euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(euwStartDate, euwEndDate)
+    mdStartDate = saleStart.strftime("%-m%d")
+    mdEndDate = saleEnd.strftime("%-m%d")
+    dmStartDate = saleStart.strftime("%d%-m")
+    dmEndDate = saleEnd.strftime("%d%-m")
+    naLink1 = "http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStartDate, mdEndDate)
+    naLink2 = "http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStartDate, dmEndDate)
+    euwLink1 = "http://beta.euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStartDate, dmEndDate)
+    euwLink2 = "http://beta.euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStartDate, mdEndDate)
 
     if saleStart.month == saleEnd.month:
         postTitle = "Champion & Skin Sale ({0}–{1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
     else:
         postTitle = "Champion & Skin Sale ({0} – {1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
 
-    return naLink, euwLink, postTitle
+    return naLink1, naLink2, euwLink1, euwLink2, postTitle
 
 def getContent(testURL = None):
     if testURL:
@@ -57,7 +68,9 @@ def getContent(testURL = None):
             sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
             
         if header.status == 404:
-            sys.exit(kWarning + "{0} not found. ".format(testURL) + kReset + "Terminating script.")
+            sys.exit(kWarning + "{0} not found (404). ".format(testURL) + kReset + "Terminating script.")
+        elif header.status == 403:
+            logForbidden(content)
         else:
             try:
                 saleStart, saleEnd = re.findall("http://beta\.(?:na|euw)\.leagueoflegends\.com/\S*?-(\d{3,4})-(\d{3,4})", testURL)[0]
@@ -66,18 +79,28 @@ def getContent(testURL = None):
             else:
                 pass
 
+            dateFormat = raw_input("Enter format of date in given URL (MD / DM): ")
+
+            if dateFormat == "MD" or dateFormat == "md":
+                givenFormat = "%m%d"
+                altFormat = "%d%m"
+            elif dateFormat == "DM" or dateFormat == "dm":
+                givenFormat = "%d%m"
+                altFormat = "%m%d"
+            else:
+                sys.exit(kWarning + "Invalid date string format. " + kReset + "Terminating script.")
+
+            startDate = datetime.datetime.strptime(saleStart, givenFormat)
+            endDate = datetime.datetime.strptime(saleEnd, givenFormat)
+
             if ".na." in testURL:
                 naLink = testURL
-                startDate = datetime.datetime.strptime(saleStart, "%m%d")
-                endDate = datetime.datetime.strptime(saleEnd, "%m%d")
                 euwLink = "http://beta.euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(
-                    startDate.strftime("%d%-m"), endDate.strftime("%d%-m"))
+                    startDate.strftime(altFormat), endDate.strftime(altFormat))
             elif ".euw." in testURL:
                 euwLink = testURL
-                startDate = datetime.datetime.strptime(saleStart, "%d%m")
-                endDate = datetime.datetime.strptime(saleEnd, "%d%m")
                 naLink = "http://beta.na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(
-                    startDate.strftime("%-m%d"), endDate.strftime("%-m%d"))
+                    startDate.strftime(altFormat), endDate.strftime(altFormat))
 
             if startDate.month == endDate.month:
                 postTitle = "Champion & Skin Sale ({0}–{1})".format(startDate.strftime("%B %-d"), endDate.strftime("%-d"))
@@ -85,30 +108,59 @@ def getContent(testURL = None):
                 postTitle = "Champion & Skin Sale ({0} – {1})".format(startDate.strftime("%B %-d"), endDate.strftime("%B %-d"))
 
     else: # not testURL
-        naLink, euwLink, postTitle = generateLinks()
-        print "Last sale ended on {0}. Requesting {1}".format(lastrun.lastSaleEnd, naLink)
+        naLink1, naLink2, euwLink1, euwLink2, postTitle = generateLinks()
+        print "Last sale ended on {0}. Requesting {1}".format(lastrun.lastSaleEnd, naLink1)
         try:
-            header, content = httplib2.Http().request(naLink)
+            header, content = httplib2.Http().request(naLink1)
         except httplib2.ServerNotFoundError:
             sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
 
         # Tries the EU-W page if the NA page does not exist
         if header.status == 404:
-            print kWarning + "NA page not found. " + kReset + "Requesting EU-W page: " + euwLink
-            try:
-                header, content = httplib2.Http().request(euwLink)
-            except httplib2.ServerNotFoundError:
-                sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
+            print kWarning + "NA page not found. " + kReset + "Requesting EU-W page: " + euwLink1
+            header, content = httplib2.Http().request(euwLink1)
             
             if header.status == 404:
-                sys.exit(kWarning + "EU-W page not found. " + kReset + "Terminating script.")
+                print(kWarning + "EU-W page not found. " + kSpecial + "Attempting alternate date format." + kReset)
+
+                print "Requesting {0}".format(naLink2)
+                header, content = httplib2.Http().request(naLink2)
+
+                if header.status == 404:
+                    print kWarning + "NA page not found. " + kReset + "Requesting EU-W page: " + euwLink2
+                    header, content = httplib2.Http().request(euwLink2)
+
+                    if header.status == 404:
+                        sys.exit(kWarning + "EU-W page not found. " + kReset + "Terminating script.")
+                    elif header.status == 403:
+                        logForbidden(content)
+                    else:
+                        naLink = naLink2
+                        euwLink = euwLink2
+
+                elif header.status == 403:
+                    logForbidden(content)
+                else:
+                    naLink = naLink2
+                    euwLink = euwLink2
+
+
+            elif header.status == 403:
+                logForbidden(content)
             else:
-                pass
+                naLink = naLink1
+                euwLink = euwLink1
+
+        elif header.status == 403:
+                logForbidden(content)
         else:
-            pass
+            naLink = naLink1
+            euwLink = euwLink1
 
     if testURL:
         print kSpecial + postTitle + kReset
+    else:
+        print kSuccess + "Post found!" + kReset + "\n"
 
     return content, postTitle, naLink, euwLink
 
@@ -170,11 +222,11 @@ def makePost(saleArray, bannerLink, naLink, euwLink):
     ("I recently bought one of these skins/champions.",
         "If you made the purchase within the past two weeks, you can [open a support ticket](https://support.leagueoflegends.com/anonymous_requests/new) and have the difference refunded."),
     ("How do you know the prices of the next skin sale?",
-        "The skin sales now follow a [four-stage rotation](http://forums.na.leagueoflegends.com/board/showthread.php?t=3651816). In addition to this skin rotation, all champion sales will contain a 975 RP, 880 RP, and 790 RP or lower champion."),
+        "The skin sales follow a [four-stage rotation](http://forums.na.leagueoflegends.com/board/showthread.php?t=3651816)."),
     ("What will skins and champions will be on sale next?",
-        "Unfortunately, /u/LeagueSalesBot is a Reddit bot, not a psychic. However, Jagz has created a [spreadsheet](https://docs.google.com/spreadsheet/lv?key=0AgTL8IK0A37pdHB2MmNfVG93enV2SnpJeHhxTHhZcUE) with information regarding what skins and champions are due to go on sale in the near future."),
+        "Unfortunately, /u/LeagueSalesBot is a Reddit bot, not a psychic. That being said, Jagz has created a [spreadsheet](https://docs.google.com/spreadsheet/lv?key=0AgTL8IK0A37pdHB2MmNfVG93enV2SnpJeHhxTHhZcUE) with data on what skins and champions are due to go on sale."),
     ("How does this bot work?",
-        "The bot is written in [Python](http://www.python.org/) and uses the [PRAW](https://praw.readthedocs.org/en/latest/) library. It monitors the League of Legends website for a new champion & skin sale; if it finds one, it parses the information on the page and formats it into a Reddit post.")
+        "/u/LeagueSalesBot is written in [Python](http://www.python.org/). It uses the [PRAW](https://praw.readthedocs.org/en/latest/) library to interface with Reddit's [API](http://www.reddit.com/dev/api) and [httplib2](http://code.google.com/p/httplib2/) to retrieve data from sale pages.")
     ]
 
     faq = ""
@@ -245,19 +297,13 @@ def manualPost():
 
         sale.name = raw_input("Name: ")
         sale.cost = int(raw_input("Sale price: "))
-        sale.splash = raw_input("Splash URL: ")
-        if not sale.splash:
-            sale.splash = "##"
+        sale.splash = raw_input("Splash URL: ") or "##"
             
         if sale.__class__ is Skin:
-            sale.inGame = raw_input("In-game screenshot URL: ")
-            if not sale.inGame:
-                sale.inGame = "##"
+            sale.inGame = raw_input("In-game screenshot URL: ") or "##"
         print "\n"
 
-    bannerLink = raw_input("Enter URL of banner link: ")
-    if not bannerLink:
-        bannerLink = "##"
+    bannerLink = raw_input("Enter URL of banner link: ") or "##"
 
     postBody = makePost(saleArray, bannerLink, naLink, euwLink)
 
@@ -295,9 +341,8 @@ def main(testURL = None):
         try:
             saleArray[i].text = unicode(re.findall(saleRegex, content)[i], "utf-8")
         except IndexError:
-            # This occurs when the sale was posted recently and the page is formatted differently
-            # from how it normally is. This is where we run into issues.
-            fileName = datetime.datetime.now().strftime("%H.%M.%S") + ".txt"
+            # That annoying error.
+            fileName = datetime.datetime.now().strftime("%H.%M.%S") + " IndexError.html"
             directory = os.path.dirname(os.path.abspath(__file__))
             path = os.path.join(directory, 'logs/' + fileName)
             f = open(path, 'w')
@@ -339,6 +384,9 @@ def main(testURL = None):
         else:
             print kWarning + "Did not post to Reddit." + kReset
             sys.exit(0)
+
+    print kSpecial + postTitle + kReset
+    print postBody
 
     submitPost(postTitle, postBody)
 
