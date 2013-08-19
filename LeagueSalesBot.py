@@ -1,7 +1,7 @@
 #! /usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os, sys, re, datetime
+import os, sys, re, datetime, webbrowser
 import httplib2, praw
 import settings, lastrun
 
@@ -18,6 +18,38 @@ kWarning = '\033[31m'
 kSuccess = '\033[32m'
 kSpecial = '\033[36m'
 kReset = '\033[0m'
+
+def openBanner(bannerLink = None):
+    if bannerLink:
+        pass
+    else:
+        bannerLink = raw_input("Enter starting date (YYYY-MM-DD) or banner link of next sale: ")
+
+    if "http://" in bannerLink:
+        pass
+    else:
+        inputDate = datetime.datetime.strptime(bannerLink, "%Y-%m-%d")
+        year = str(inputDate.year)
+        if len(str(inputDate.month)) == 1:
+            month = "0" + str(inputDate.month)
+        else:
+            month = str(inputDate.month)
+        day = inputDate.day
+        bannerLink = (
+            "http://beta.na.leagueoflegends.com/sites/default/files/styles/wide_medium/public/upload/{0}.{1}.{2}.articlebanner.champskinsale.jpg".format(year, month, day))
+
+    header, content = httplib2.Http().request(bannerLink)
+
+    print "Banner returned {0}.".format(header.status)
+
+    if header.status == 200:
+        confirm = raw_input("Open in browser? (Y/N) ".format(header.status))
+        if (confirm == "y") or (confirm == "Y"):
+            webbrowser.open(bannerLink)
+
+    sys.exit(header.status)
+
+
 
 def logForbidden(content):
     fileName = datetime.datetime.now().strftime("%H.%M.%S") + "-403.html"
@@ -223,7 +255,7 @@ def makePost(saleArray, bannerLink, naLink, euwLink):
         "If you made the purchase within the past two weeks, you can [open a support ticket](https://support.leagueoflegends.com/anonymous_requests/new) and have the difference refunded."),
     ("How do you know the prices of the next skin sale?",
         "The skin sales follow a [four-stage rotation](http://forums.na.leagueoflegends.com/board/showthread.php?t=3651816)."),
-    ("What will skins and champions will be on sale next?",
+    ("What skins and champions will go on sale next?",
         "Unfortunately, /u/LeagueSalesBot is a Reddit bot, not a psychic. That being said, Jagz has created a [spreadsheet](https://docs.google.com/spreadsheet/lv?key=0AgTL8IK0A37pdHB2MmNfVG93enV2SnpJeHhxTHhZcUE) with data on what skins and champions are due to go on sale."),
     ("How does this bot work?",
         "/u/LeagueSalesBot is written in [Python](http://www.python.org/). It uses the [PRAW](https://praw.readthedocs.org/en/latest/) library to interface with Reddit's [API](http://www.reddit.com/dev/api) and [httplib2](http://code.google.com/p/httplib2/) to retrieve data from sale pages.")
@@ -251,7 +283,7 @@ def submitPost(postTitle, postBody):
     # Post to Reddit (first /r/leagueoflegends, and then /r/LeagueSalesBot for archival purposes)
     r = praw.Reddit(user_agent=settings.userAgent)
     r.login(settings.username, settings.password)
-    r.submit("leagueoflegends", postTitle, text=postBody)
+    # r.submit("leagueoflegends", postTitle, text=postBody)
     r.submit("LeagueSalesBot", postTitle, text=postBody)
 
     print kSuccess + "Posted to Reddit." + kReset
