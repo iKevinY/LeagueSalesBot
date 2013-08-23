@@ -1,7 +1,7 @@
 #! /usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os, sys, re, datetime, webbrowser
+import os, sys, re, math, datetime, webbrowser
 import httplib2, praw
 import settings, lastrun
 
@@ -20,38 +20,37 @@ kSpecial = '\033[36m'
 kReset = '\033[0m'
 
 def openBanner(bannerLink = None):
-    if bannerLink:
-        pass
-    else:
-        bannerLink = raw_input("Enter starting date (YYYY-MM-DD) or banner link of next sale: ")
 
-    if "http://" in bannerLink:
-        pass
+    if (lastrun.rotation % 2) == 0:
+        delta = datetime.timedelta(1)
     else:
-        inputDate = datetime.datetime.strptime(bannerLink, "%Y-%m-%d")
-        year = str(inputDate.year)
-        if len(str(inputDate.month)) == 1:
-            month = "0" + str(inputDate.month)
-        else:
-            month = str(inputDate.month)
-        day = inputDate.day
-        bannerLink = (
-            "http://beta.na.leagueoflegends.com/sites/default/files/styles/wide_medium/public/upload/{0}.{1}.{2}.articlebanner.champskinsale.jpg".format(year, month, day))
+        delta = datetime.timedelta(0)
+
+    inputDate = datetime.datetime.strptime(lastrun.lastSaleEnd, "%Y-%m-%d") + delta
+
+    year = str(inputDate.year)
+    if len(str(inputDate.month)) == 1:
+        month = "0" + str(inputDate.month)
+    else:
+        month = str(inputDate.month)
+    day = inputDate.day
+    bannerLink = (
+        "http://beta.na.leagueoflegends.com/sites/default/files/styles/wide_medium/public/upload/{0}.{1}.{2}.articlebanner.champskinsale.jpg".format(year, month, day))
 
     header, content = httplib2.Http().request(bannerLink)
 
-    print "Banner returned {0}.".format(header.status)
+    print "Using sale start date of {0}. Banner returned {1}.".format(inputDate.strftime("%Y-%m-%d"), header.status)
 
     if header.status == 200:
         confirm = raw_input("Open in browser? (Y/N) ".format(header.status))
         if (confirm == "y") or (confirm == "Y"):
             webbrowser.open(bannerLink)
-
-    sys.exit(header.status)
-
-
+        sys.exit(0)
+    else:
+        sys.exit(header.status)
 
 def logForbidden(content):
+    """
     fileName = datetime.datetime.now().strftime("%H.%M.%S") + "-403.html"
     directory = os.path.dirname(os.path.abspath(__file__))
     path = os.path.join(directory, 'logs/' + fileName)
@@ -59,6 +58,8 @@ def logForbidden(content):
     f.write(content)
     f.close()
     print kWarning + "403 forbidden. " + kReset + "Wrote page content to " + fileName
+    """
+    print kWarning + "403 forbidden." + kReset
     sys.exit(403)
 
 def generateLinks():
@@ -155,7 +156,7 @@ def getContent(testURL = None):
             if header.status == 404:
                 print(kWarning + "EU-W page not found. " + kSpecial + "Attempting alternate date format." + kReset)
 
-                print "Requesting {0}".format(naLink2)
+                print "Requesting alternate date format NA page: {0}".format(naLink2)
                 header, content = httplib2.Http().request(naLink2)
 
                 if header.status == 404:
@@ -228,10 +229,10 @@ def saleOutput(sale):
         
         else: champName = sale.name.rsplit(' ', 1)[1]
         
-        imageString = "[Splash Art](" + sale.splash + "), [In-Game](" + sale.inGame + ")"
+        imageString = "[Splash Art]({0}), [In-Game]({1})".format(sale.splash, sale.inGame)
     else: # sale.isSkin == False
         champName = sale.name
-        imageString = "[Splash Art](" + sale.splash + ")"
+        imageString = "[Splash Art]({0})".format(sale.splash)
 
     champLink = "http://leagueoflegends.wikia.com/wiki/" + champName.replace(" ", "_")
     iconName = re.sub('\ |\.|\'', '', champName.lower())
@@ -283,7 +284,7 @@ def submitPost(postTitle, postBody):
     # Post to Reddit (first /r/leagueoflegends, and then /r/LeagueSalesBot for archival purposes)
     r = praw.Reddit(user_agent=settings.userAgent)
     r.login(settings.username, settings.password)
-    # r.submit("leagueoflegends", postTitle, text=postBody)
+    r.submit("leagueoflegends", postTitle, text=postBody)
     r.submit("LeagueSalesBot", postTitle, text=postBody)
 
     print kSuccess + "Posted to Reddit." + kReset
@@ -300,8 +301,11 @@ def submitPost(postTitle, postBody):
     print kSuccess + "Updated lastrun.py successfully." + kReset
 
 def manualPost():
-    saleStart = datetime.datetime.strptime(raw_input("Enter sale starting date (MMDD): "), "%m%d")
-    saleEnd = datetime.datetime.strptime(raw_input("Enter sale ending date (MMDD): "), "%m%d")
+    rotationSchedule = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
+    thisRotation = rotationSchedule[(lastrun.rotation % 4) - 1]
+
+    saleStart = datetime.datetime.strptime(raw_input("Enter sale starting date (YYYY-MM-DD): "), "%Y-%m-%d")
+    saleEnd = saleStart + datetime.timedelta(3)
 
     naStartDate = saleStart.strftime("%-m%d")
     naEndDate = saleEnd.strftime("%-m%d")
@@ -323,23 +327,42 @@ def manualPost():
     # Skins
     for sale in saleArray:
         if sale.__class__ is Skin:
+            thisRegular = thisRotation[saleArray.index(sale)]
             print "Skin #{0}:".format(saleArray.index(sale)+1)
+            sale.name = raw_input("Name (skin price {0} RP): ".format(thisRegular))
+            try:
+                sale.name.rsplit(' ', 1)[1]
+            except IndexError:
+                champName = raw_input("Champion name: ")
+                saleTitle = raw_input("Sale title: ")
+            else:
+                champName = raw_input("Champion name [{0}]: ".format(sale.name.rsplit(' ', 1)[1])).replace(" ", "") or sale.name.rsplit(' ', 1)[1]
+                saleTitle = raw_input("Sale title [{0}]: ".format(sale.name.rsplit(' ', 1)[0])).replace(" ", "") or sale.name.rsplit(' ', 1)[0]
+            sale.cost = int(math.floor(thisRegular / 2))
+            sale.splash = "http://riot-web-static.s3.amazonaws.com/images/news/Skins/{0}_{1}_Splash.jpg".format(champName, saleTitle)
+            sale.inGame = "http://riot-web-static.s3.amazonaws.com/images/news/Skins/{0}_{1}_SS.jpg".format(champName, saleTitle)
         else:
             print "Champion #{0}:".format(saleArray.index(sale)-2)
-
-        sale.name = raw_input("Name: ")
-        sale.cost = int(raw_input("Sale price: "))
-        sale.splash = raw_input("Splash URL: ") or "##"
+            sale.name = raw_input("Name: ")
+            sale.cost = int(raw_input("Sale price (292-585, 395-790, 440-880, 487-975): "))
+            saleName = sale.name.replace('.', '')
+            if saleName == "Jarvan IV":
+                saleName = "Jarvan"
+            try:
+                saleName = saleName.rsplit(' ', 1)[0] + saleName.rsplit(' ', 1)[1].lower()
+            except IndexError:
+                pass
             
-        if sale.__class__ is Skin:
-            sale.inGame = raw_input("In-game screenshot URL: ") or "##"
-        print "\n"
+            sale.splash = "http://riot-web-static.s3.amazonaws.com/images/news/Champ_Splashes/{0}_Splash.jpg".format(saleName)
+
+    print "\n"
 
     bannerLink = raw_input("Enter URL of banner link: ") or "##"
 
     postBody = makePost(saleArray, bannerLink, naLink, euwLink)
 
-    print postBody
+    print "" + postBody
+
     prompt = raw_input("Post to Reddit? (Y/N) ")
     if prompt == "Y" or prompt == "y":
         prompt = raw_input("Confirm? (Y/N) ")
@@ -352,7 +375,7 @@ def manualPost():
         print kWarning + "Did not post to Reddit." + kReset
         sys.exit(0)
 
-    submitPost(postTitle, postBody)
+    # submitPost(postTitle, postBody)
 
     sys.exit(0)
 
@@ -362,7 +385,7 @@ def main(testURL = None):
 
     saleRegex = re.compile("<ul><li>(.*?<strong>\d{3,4} RP</strong>)</li></ul>")
     imageRegex = re.compile("<a href=\"(http://riot-web-static\.s3\.amazonaws\.com/images/news/\S*?\.jpg)\"")
-    bannerRegex = re.compile("<img .*? src=\"(http://beta\.(?:na|euw)\.leagueoflegends\.com/\S*?articlebanner\S*?.jpg)?\S*?\"")
+    bannerRegex = re.compile("(http://beta\.(?:na|euw)\.leagueoflegends\.com/\S*?articlebanner\S*?.jpg)?\S*?")
 
     # Declare sale objects
     saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
