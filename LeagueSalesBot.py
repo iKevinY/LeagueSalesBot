@@ -304,7 +304,18 @@ def manualPost():
     rotationSchedule = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
     thisRotation = rotationSchedule[(lastrun.rotation % 4) - 1]
 
-    saleStart = datetime.datetime.strptime(raw_input("Enter sale starting date (YYYY-MM-DD): "), "%Y-%m-%d")
+    lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, "%Y-%m-%d")
+
+    if (lastrun.rotation % 2) == 0:
+        saleDefault = lastSaleEnd + datetime.timedelta(1)
+    else:
+        saleDefault = lastSaleEnd
+
+    try:
+        saleStart = datetime.datetime.strptime(raw_input("Enter sale starting date [{0}]: ".format(saleDefault.strftime("%Y-%m-%d"))), "%Y-%m-%d")
+    except ValueError:
+        saleStart = saleDefault
+        
     saleEnd = saleStart + datetime.timedelta(3)
 
     naStartDate = saleStart.strftime("%-m%d")
