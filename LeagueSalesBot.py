@@ -99,7 +99,7 @@ def getContent(testURL = None):
             header, content = httplib2.Http().request(testURL)
         except httplib2.ServerNotFoundError:
             sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
-            
+
         if header.status == 404:
             sys.exit(kWarning + "{0} not found (404). ".format(testURL) + kReset + "Terminating script.")
         elif header.status == 403:
@@ -152,7 +152,7 @@ def getContent(testURL = None):
         if header.status == 404:
             print kWarning + "NA page not found. " + kReset + "Requesting EU-W page: " + euwLink1
             header, content = httplib2.Http().request(euwLink1)
-            
+
             if header.status == 404:
                 print(kWarning + "EU-W page not found. " + kSpecial + "Attempting alternate date format." + kReset)
 
@@ -226,9 +226,9 @@ def saleOutput(sale):
         elif sale.name == "Jack of Hearts":                     champName = "Twisted Fate"
         elif sale.name == "Giant Enemy Crabgot":                champName = "Urgot"
         elif sale.name == "Urf the Manatee":                    champName = "Warwick"
-        
+
         else: champName = sale.name.rsplit(' ', 1)[1]
-        
+
         imageString = "[Splash Art]({0}), [In-Game]({1})".format(sale.splash, sale.inGame)
     else: # sale.isSkin == False
         champName = sale.name
@@ -284,11 +284,11 @@ def submitPost(postTitle, postBody):
     # Post to Reddit (first /r/leagueoflegends, and then /r/LeagueSalesBot for archival purposes)
     r = praw.Reddit(user_agent=settings.userAgent)
     r.login(settings.username, settings.password)
-    r.submit("leagueoflegends", postTitle, text=postBody)
-    r.submit("LeagueSalesBot", postTitle, text=postBody)
+    # r.submit("leagueoflegends", postTitle, text=postBody)
+    # r.submit("LeagueSalesBot", postTitle, text=postBody)
 
     print kSuccess + "Posted to Reddit." + kReset
-    
+
     # Make appropriate changes to lastrun.py if post succeeds
     saleEndText = (datetime.datetime.now() + datetime.timedelta(4)).strftime("%Y-%m-%d")
 
@@ -315,7 +315,7 @@ def manualPost():
         saleStart = datetime.datetime.strptime(raw_input("Enter sale starting date [{0}]: ".format(saleDefault.strftime("%Y-%m-%d"))), "%Y-%m-%d")
     except ValueError:
         saleStart = saleDefault
-        
+
     saleEnd = saleStart + datetime.timedelta(3)
 
     naStartDate = saleStart.strftime("%-m%d")
@@ -363,7 +363,7 @@ def manualPost():
                 saleName = saleName.rsplit(' ', 1)[0] + saleName.rsplit(' ', 1)[1].lower()
             except IndexError:
                 pass
-            
+
             sale.splash = "http://riot-web-static.s3.amazonaws.com/images/news/Champ_Splashes/{0}_Splash.jpg".format(saleName)
 
     print "\n"
@@ -396,7 +396,7 @@ def main(testURL = None):
 
     saleRegex = re.compile("<ul><li>(.*?<strong>\d{3,4} RP</strong>)</li></ul>")
     imageRegex = re.compile("<a href=\"(http://riot-web-static\.s3\.amazonaws\.com/images/news/\S*?\.jpg)\"")
-    bannerRegex = re.compile("(http://beta\.(?:na|euw)\.leagueoflegends\.com/\S*?articlebanner\S*?.jpg)?\S*?")
+    bannerRegex = re.compile("src=\"(\S*?articlebanner\S*?.jpg)")
 
     # Declare sale objects
     saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
@@ -434,6 +434,7 @@ def main(testURL = None):
             pass
 
     bannerLink = re.findall(bannerRegex, content)[0]
+    bannerLink = "http://beta.na.leagueoflegends.com/" + bannerLink
 
     postBody = makePost(saleArray, bannerLink, naLink, euwLink)
 
