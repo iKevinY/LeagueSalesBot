@@ -16,9 +16,6 @@ There are a couple of files that this bot uses but aren't included in this Git r
 `settings.py` contains information like the username and password of the bot, the user agent used, the subreddit the bot is posting to, and also what page the bot should search in order to check for a new sale.
 
     # settings.py
-    newsPage = "http://beta.na.leagueoflegends.com/en/news/store/"
-
     username = ""
     password = ""
     userAgent = ""
-    subreddit = ""

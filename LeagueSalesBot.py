@@ -33,60 +33,47 @@ def getContent():
     # Sales always end 3 days after they start (four-day-long sales)
     saleEnd = saleStart + datetime.timedelta(3)
 
-    # http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-0415-0418
-    # Hyphen below to strip leading zero
+    # Insert leading hyphen to strip leading zero
     mdStart = saleStart.strftime("%m%d")
     mdEnd = saleEnd.strftime("%m%d")
     dmStart = saleStart.strftime("%d%m")
     dmEnd = saleEnd.strftime("%d%m")
-    naLink1 = "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd)
-    naLink2 = "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStart, dmEnd)
-    euwLink1 = "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStart, dmEnd)
-    euwLink2 = "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd)
+
+    links = {}
+    links[0] = "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd)
+    links[1] = "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStart, dmEnd)
+    links[2] = "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStart, dmEnd)
+    links[3] = "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd)
+    naLink, euwLink = None, None
 
     if saleStart.month == saleEnd.month:
         dateRange = "({0}–{1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
     else:
         dateRange = "({0} – {1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
 
-    print "Last sale ended on {0}. Requesting {1}".format(lastrun.lastSaleEnd, naLink1)
-    try:
-        header, content = httplib2.Http().request(naLink1)
-    except httplib2.ServerNotFoundError:
-        sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
+    print "Last sale ended on {0}.".format(lastrun.lastSaleEnd)
 
-    # Tries the EU-W page if the NA page does not exist
-    if header.status == 404:
-        print kWarning + "NA page not found. " + kReset + "Requesting EU-W page: " + euwLink1
-        header, content = httplib2.Http().request(euwLink1)
+    for i in range(len(links)):
+        try:
+            header, content = httplib2.Http().request(links[i])
+        except httplib2.ServerNotFoundError:
+            sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
+
+        print "Requesting {0}".format(links[i])
 
         if header.status == 404:
-            print(kWarning + "EU-W page not found. " + kSpecial + "Attempting alternate date format." + kReset)
-
-            print "Requesting alternate date format NA page: {0}".format(naLink2)
-            header, content = httplib2.Http().request(naLink2)
-
-            if header.status == 404:
-                print kWarning + "NA page not found. " + kReset + "Requesting EU-W page: " + euwLink2
-                header, content = httplib2.Http().request(euwLink2)
-
-                if header.status == 404:
-                    sys.exit(kWarning + "EU-W page not found. " + kReset + "Terminating script.")
-                else:
-                    naLink = naLink2
-                    euwLink = euwLink2
-
+            if i == 3:
+                sys.exit(kWarning + "Not found. Terminating script." + kReset)
             else:
-                naLink = naLink2
-                euwLink = euwLink2
-
+                print kWarning + "Not found." + kReset
+        elif header.status == 403:
+            sys.exit(kWarning + "403 Forbidden." + kReset)
         else:
-            naLink = naLink1
-            euwLink = euwLink1
-
-    else:
-        naLink = naLink1
-        euwLink = euwLink1
+            if i % 2 == 0:
+                naLink, euwLink = links[0], links[2]
+            else:
+                naLink, euwLink = links[1], links[3]
+            break
 
     print kSuccess + "Post found!" + kReset + "\n"
     return content, dateRange, naLink, euwLink
@@ -194,13 +181,11 @@ def submitPost(postTitle, postBody):
 
 def manualPost():
     rotationSchedule = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
-    thisRotation = rotationSchedule[(lastrun.rotation % 4) - 1]
+    thisRotation = rotationSchedule[((lastrun.rotation + 4) % 4) - 1]
     lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, "%Y-%m-%d")
 
-    if (lastrun.rotation % 2) == 0:
-        saleDefault = lastSaleEnd + datetime.timedelta(1)
-    else:
-        saleDefault = lastSaleEnd
+    # Offset sale start by one day if lastrun.rotation == 0 or 2
+    saleDefault = lastSaleEnd + datetime.timedelta((lastrun.rotation + 1) % 2)
 
     try:
         saleStart = datetime.datetime.strptime(raw_input("Enter sale starting date [{0}]: ".format(saleDefault.strftime("%Y-%m-%d"))), "%Y-%m-%d")
@@ -209,44 +194,43 @@ def manualPost():
 
     saleEnd = saleStart + datetime.timedelta(3)
 
-    naStartDate = saleStart.strftime("%-m%d")
-    naEndDate = saleEnd.strftime("%-m%d")
-    naLink = "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(naStartDate, naEndDate)
-
-    euwStartDate = saleStart.strftime("%d%-m")
-    euwEndDate = saleEnd.strftime("%d%-m")
-    euwLink = "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(euwStartDate, euwEndDate)
+    naLink = "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}" \
+        .format(saleStart.strftime("%-m%d"), saleEnd.strftime("%-m%d"))
+    euwLink = "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}" \
+        .format(saleStart.strftime("%d%-m"), saleEnd.strftime("%d%-m"))
 
     if saleStart.month == saleEnd.month:
-        postTitle = "Champion & Skin Sale ({0}–{1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
+        dateRange = "({0}–{1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
     else:
-        postTitle = "Champion & Skin Sale ({0} – {1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
+        dateRange = "({0} – {1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
 
     saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
-
-    print kSpecial + postTitle + kReset
 
     # Skins
     for sale in saleArray:
         if sale.__class__ is Skin:
             thisRegular = thisRotation[saleArray.index(sale)]
             print "Skin #{0}:".format(saleArray.index(sale)+1)
-            sale.name = raw_input("Name (skin price {0} RP): ".format(thisRegular))
+            sale.name = raw_input("Name: ".format(thisRegular))
             try:
                 sale.name.rsplit(' ', 1)[1]
             except IndexError:
                 champName = raw_input("Champion name: ")
                 saleTitle = raw_input("Sale title: ")
+                regular = raw_input("Regular cost [{0} RP]".format(thisRegular)) or thisRegular
             else:
                 champName = raw_input("Champion name [{0}]: ".format(sale.name.rsplit(' ', 1)[1])).replace(" ", "") or sale.name.rsplit(' ', 1)[1]
                 saleTitle = raw_input("Sale title [{0}]: ".format(sale.name.rsplit(' ', 1)[0])).replace(" ", "") or sale.name.rsplit(' ', 1)[0]
-            sale.cost = int(math.floor(thisRegular / 2))
+                regular = raw_input("Regular cost [{0} RP]".format(thisRegular)) or thisRegular
+            sale.regular = int(regular)
+            sale.sale = int(math.floor(sale.regular / 2))
             sale.splash = "http://riot-web-static.s3.amazonaws.com/images/news/Skin_Sales/{0}_{1}_Splash.jpg".format(champName, saleTitle)
             sale.inGame = "http://riot-web-static.s3.amazonaws.com/images/news/Skin_Sales/{0}_{1}_SS.jpg".format(champName, saleTitle)
         else:
             print "Champion #{0}:".format(saleArray.index(sale)-2)
             sale.name = raw_input("Name: ")
-            sale.cost = int(raw_input("Sale price (292-585, 395-790, 440-880, 487-975): "))
+            sale.regular = int(raw_input("Regular price: "))
+            sale.sale = int(math.floor(sale.regular / 2))
             saleName = sale.name.replace('.', '')
             if saleName == "Jarvan IV":
                 saleName = "Jarvan"
@@ -258,9 +242,9 @@ def manualPost():
             sale.splash = "http://riot-web-static.s3.amazonaws.com/images/news/Champ_Splashes/{0}_Splash.jpg".format(saleName)
 
     print "\n"
-    postBody = makePost(saleArray, naLink, euwLink, dateRange)
-
-    print "" + postBody
+    postTitle, postBody = makePost(saleArray, naLink, euwLink, dateRange)
+    print kSpecial + postTitle + kReset
+    print postBody
 
     prompt = raw_input("Post to Reddit? (Y/N) ")
     if prompt == "Y" or prompt == "y":
@@ -278,15 +262,12 @@ def main():
 
     saleRegex = re.compile("<h4>(?:<a href.+?>)*\s*?(.+?)\s*?(?:<\/a>)*<\/h4>\s+?<strike.*?>(\d{3,4})<\/strike> (\d{3,4}) RP")
     imageRegex = re.compile("(http://riot-web-static\.s3\.amazonaws\.com/images/news/Skin_Sales/\S*?\.jpg)")
-
-    # Declare sale objects
     saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
 
     for i in range(0, 6):
         print re.findall(saleRegex, content)[i]
         saleArray[i].name, saleArray[i].regular, saleArray[i].sale = re.findall(saleRegex, content)[i]
 
-        # Skins have splash and in-game while champions only have splash art
         if saleArray[i].__class__ is Skin:
             saleArray[i].splash = re.findall(imageRegex, content)[(i*4)]
             saleArray[i].inGame = re.findall(imageRegex, content)[(i*4)+2]
@@ -298,3 +279,12 @@ def main():
 
     submitPost(postTitle, postBody)
     sys.exit(0)
+
+if __name__ == "__main__":
+    try:
+        sys.argv[1]
+    except IndexError:
+        main()
+    else:
+        if sys.argv[1] == "-m":
+            manualPost()
