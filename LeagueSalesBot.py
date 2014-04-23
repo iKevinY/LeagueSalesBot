@@ -25,10 +25,7 @@ def getContent():
 
     # If lastrun.rotation is even, the last sale was posted on a Thursday so the next sale will start a day after the
     # end date of the previous sale. Otherwise, the next sale will start on the same day that the last sale ended on.
-    if (lastrun.rotation % 2) == 0:
-        saleStart = lastSaleEnd + datetime.timedelta(1)
-    else:
-        saleStart = lastSaleEnd
+    saleStart = lastSaleEnd + datetime.timedelta((lastrun.rotation + 1) % 2)
 
     # Sales always end 3 days after they start (four-day-long sales)
     saleEnd = saleStart + datetime.timedelta(3)
@@ -163,10 +160,11 @@ def makePost(saleArray, naLink, euwLink, dateRange):
     )
 
 def submitPost(postTitle, postBody):
-    r = praw.Reddit(user_agent = settings.userAgent)
+    r = praw.Reddit(user_agent=settings.userAgent)
     r.login(settings.username, settings.password)
-    r.submit("LeagueSalesBot", postTitle, text = postBody)
-    print kSuccess + "Post successfully submitted to Reddit." + kReset
+    for subreddit in settings.subreddits:
+        r.submit(subreddit, postTitle, text=postBody)
+    print kSuccess + "Post successfully submitted to " + ", ".join(settings.subreddits) + "." + kReset
 
     # Make appropriate changes to lastrun.py if post succeeds
     saleEndText = (datetime.datetime.now() + datetime.timedelta(4)).strftime("%Y-%m-%d")
@@ -244,7 +242,8 @@ def manualPost():
     print "\n"
     postTitle, postBody = makePost(saleArray, naLink, euwLink, dateRange)
     print kSpecial + postTitle + kReset
-    print postBody
+    for sale in saleArray:
+        print sale + "\n"
 
     prompt = raw_input("Post to Reddit? (Y/N) ")
     if prompt == "Y" or prompt == "y":
@@ -275,10 +274,12 @@ def main():
     postTitle, postBody = makePost(saleArray, naLink, euwLink, dateRange)
 
     print kSpecial + postTitle + kReset
-    print postBody
+    for sale in saleArray:
+        print "{0} ({1})".format(sale.name, sale.sale)
 
     submitPost(postTitle, postBody)
     sys.exit(0)
+
 
 if __name__ == "__main__":
     try:
