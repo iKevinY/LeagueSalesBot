@@ -13,7 +13,7 @@ class Skin(Sale):
 class Champ(Sale):
     isSkin = False
 
-# Keywords for ANSI-coloured terminal messages
+# Define variables for ANSI-coloured terminal messages
 kWarning = '\033[31m'
 kSuccess = '\033[32m'
 kSpecial = '\033[36m'
@@ -64,7 +64,10 @@ def getContent():
             else:
                 print kWarning + "Not found." + kReset
         elif header.status == 403:
-            sys.exit(kWarning + "403 Forbidden." + kReset)
+            if i == 3:
+                sys.exit(kWarning + "403 Forbidden. Terminating script." + kReset)
+            else:
+                print kWarning + "403 Forbidden." + kReset
         else:
             if i % 2 == 0:
                 naLink, euwLink = links[0], links[2]
@@ -107,6 +110,7 @@ def saleOutput(sale):
 
         else: champName = sale.name.rsplit(' ', 1)[1]
 
+        spotlightString = "[Skin Spotlight]({0})".format(sale.spotlight)
         imageString = "[Splash Art]({0}), [In-Game]({1})".format(sale.splash, sale.inGame)
     else: # sale.isSkin == False
         champName = sale.name.replace('.', '')
@@ -117,13 +121,14 @@ def saleOutput(sale):
         except IndexError:
             pass
 
+        spotlightString = "[Champion Spotlight]({0})".format(sale.spotlight)
         imageString = "[Splash Art](http://riot-web-static.s3.amazonaws.com/images/news/Champ_Splashes/{0}_Splash.jpg)".format(champName)
 
     champLink = "http://leagueoflegends.wikia.com/wiki/" + champName.replace(" ", "_")
     iconName = re.sub('\ |\.|\'', '', champName.lower())
     icon = "[](/{0})".format(iconName)
 
-    return "|" + icon + "|**[" + sale.name + "](" + champLink + ")**|" + str(sale.sale) + " RP|" + str(sale.regular) + " RP|" + imageString + "|"
+    return "|" + icon + "|**[" + sale.name + "](" + champLink + ")**|" + str(sale.sale) + " RP|" + str(sale.regular) + " RP|" + spotlightString + ", " + imageString + "|"
 
 def makePost(saleArray, naLink, euwLink, dateRange):
     # Automate rotation of sale rotation
@@ -132,7 +137,7 @@ def makePost(saleArray, naLink, euwLink, dateRange):
 
     faqArray = [
     ("I recently bought one of these skins/champions.",
-        "If you made the purchase within the past two weeks, you can [open a support ticket](https://support.leagueoflegends.com/anonymous_requests/new) and have the difference refunded."),
+        "Generally, if you made the purchase within the past two weeks, you can [open a support ticket](https://support.leagueoflegends.com/anonymous_requests/new) and have the difference refunded. However, since the full May sale schedule was [already posted](http://na.leagueoflegends.com/en/news/store/sales/may-champion-and-skin-sale-schedule), partial refunds will not be offered for the sales announced."),
     ("How do you know the prices of the next skin sale?",
         "The skin sales follow a [four-stage rotation](http://forums.na.leagueoflegends.com/board/showthread.php?t=3651816)."),
     ("How does this bot work?",
@@ -150,13 +155,13 @@ def makePost(saleArray, naLink, euwLink, dateRange):
     postTitle = "[Skin Sale] " + saleArray[0].name + ", " + saleArray[1].name + ", " + saleArray[2].name + " " + dateRange
 
     return postTitle, (
-        "| Icon | Skin/Champion | Sale Price | Regular Price | Images |\n" +
-        "|:----:|:-------------:|:----------:|:-------------:|:------:|\n" +
+        "| Icon | Skin/Champion | Sale Price | Regular Price | Media |\n" +
+        "|:----:|:-------------:|:----------:|:-------------:|:-----:|\n" +
         sales + '\n'
         "Next skin sale: **{0} RP, {1} RP, {2} RP**. ".format(nextRotation[0], nextRotation[1], nextRotation[2]) +
         "Link to sale pages ([NA]({0}), [EUW]({1})).".format(naLink, euwLink) + '\n\n----\n\n' +
         "### Frequently Asked Questions\n\n" + faq + '----\n'
-        "^This ^bot ^was ^written ^by ^/u/Pewqazz. ^Feedback ^and ^suggestions ^are ^welcomed ^in ^/r/LeagueSalesBot."
+        "^This ^bot ^was ^written ^by ^/u/Pewqazz. ^Feedback, ^suggestions, ^and ^bug ^reports ^are ^welcomed ^in ^/r/LeagueSalesBot."
     )
 
 def submitPost(postTitle, postBody):
@@ -255,6 +260,19 @@ def manualPost():
     submitPost(postTitle, postBody)
     sys.exit(0)
 
+def getSpotlight(name, isSkin):
+    content = None
+    if isSkin:
+        url = "https://www.youtube.com/user/SkinSpotlights/search?query=" + name.replace(" ", "+") + "+skin+spotlight"
+        header, content = httplib2.Http().request(url)
+    else:
+        url = "https://www.youtube.com/user/RiotGamesInc/search?query=" + name.replace(" ", "+") + "+champion+spotlight"
+        header, content = httplib2.Http().request(url)
+
+    vidRegex = re.compile("<h3 class=\"yt-lockup-title\"><a .* href=\"(\S*)\">.*<\/a><\/h3>")
+
+    # Grabs URL of first result
+    return "https://www.youtube.com" + re.findall(vidRegex, content)[0]
 
 def main():
     content, dateRange, naLink, euwLink = getContent()
@@ -264,8 +282,8 @@ def main():
     saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
 
     for i in range(0, 6):
-        print re.findall(saleRegex, content)[i]
         saleArray[i].name, saleArray[i].regular, saleArray[i].sale = re.findall(saleRegex, content)[i]
+        saleArray[i].spotlight = getSpotlight(saleArray[i].name, saleArray[i].isSkin)
 
         if saleArray[i].__class__ is Skin:
             saleArray[i].splash = re.findall(imageRegex, content)[(i*4)]
