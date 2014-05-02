@@ -19,64 +19,83 @@ kSuccess = '\033[32m'
 kSpecial = '\033[36m'
 kReset = '\033[0m'
 
-def getContent():
-    # Get string of end of last sale from lastrun.py
-    lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, "%Y-%m-%d")
-
-    # If lastrun.rotation is even, the last sale was posted on a Thursday so the next sale will start a day after the
-    # end date of the previous sale. Otherwise, the next sale will start on the same day that the last sale ended on.
-    saleStart = lastSaleEnd + datetime.timedelta((lastrun.rotation + 1) % 2)
-
-    # Sales always end 3 days after they start (four-day-long sales)
-    saleEnd = saleStart + datetime.timedelta(3)
-
-    # Insert leading hyphen to strip leading zero
-    mdStart = saleStart.strftime("%m%d")
-    mdEnd = saleEnd.strftime("%m%d")
-    dmStart = saleStart.strftime("%d%m")
-    dmEnd = saleEnd.strftime("%d%m")
-
-    links = {}
-    links[0] = "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd)
-    links[1] = "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStart, dmEnd)
-    links[2] = "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStart, dmEnd)
-    links[3] = "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd)
-    naLink, euwLink = None, None
-
-    if saleStart.month == saleEnd.month:
-        dateRange = "({0}–{1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
-    else:
-        dateRange = "({0} – {1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
-
-    print "Last sale ended on {0}.".format(lastrun.lastSaleEnd)
-
-    for i in range(len(links)):
+def getContent(testLink = None):
+    if testLink:
+        naLink = testLink
+        euwLink = None
         try:
-            header, content = httplib2.Http().request(links[i])
+            header, content = httplib2.Http().request(testLink)
         except httplib2.ServerNotFoundError:
             sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
 
-        print "Requesting {0}".format(links[i])
+        start, end = re.findall(".*(\d{4})-(\d{4})", testLink)[0]
 
-        if header.status == 404:
-            if i == 3:
-                sys.exit(kWarning + "Not found. Terminating script." + kReset)
-            else:
-                print kWarning + "Not found." + kReset
-        elif header.status == 403:
-            if i == 3:
-                sys.exit(kWarning + "403 Forbidden. Terminating script." + kReset)
-            else:
-                print kWarning + "403 Forbidden." + kReset
+        saleStart = datetime.datetime.strptime(start, "%m%d")
+        saleEnd = datetime.datetime.strptime(end, "%m%d")
+
+        if saleStart.month == saleEnd.month:
+            dateRange = "({0}–{1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
         else:
-            if i % 2 == 0:
-                naLink, euwLink = links[0], links[2]
-            else:
-                naLink, euwLink = links[1], links[3]
-            break
+            dateRange = "({0} – {1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
+    else:
+        # Get string of end of last sale from lastrun.py
+        lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, "%Y-%m-%d")
 
-    print kSuccess + "Post found!" + kReset + "\n"
-    return content, dateRange, naLink, euwLink
+        # If lastrun.rotation is even, the last sale was posted on a Thursday so the next sale will start a day after the
+        # end date of the previous sale. Otherwise, the next sale will start on the same day that the last sale ended on.
+        saleStart = lastSaleEnd + datetime.timedelta((lastrun.rotation + 1) % 2)
+
+        # Sales always end 3 days after they start (four-day-long sales)
+        saleEnd = saleStart + datetime.timedelta(3)
+
+        # Insert leading hyphen to strip leading zero
+        mdStart = saleStart.strftime("%m%d")
+        mdEnd = saleEnd.strftime("%m%d")
+        dmStart = saleStart.strftime("%d%m")
+        dmEnd = saleEnd.strftime("%d%m")
+
+        links = {}
+        links[0] = "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd)
+        links[1] = "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStart, dmEnd)
+        links[2] = "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStart, dmEnd)
+        links[3] = "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd)
+        naLink, euwLink = None, None
+
+        if saleStart.month == saleEnd.month:
+            dateRange = "({0}–{1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
+        else:
+            dateRange = "({0} – {1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
+
+        print "Last sale ended on {0}.".format(lastrun.lastSaleEnd)
+
+        for i in range(len(links)):
+            try:
+                header, content = httplib2.Http().request(links[i])
+            except httplib2.ServerNotFoundError:
+                sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
+
+            print "Requesting {0}".format(links[i])
+
+            if header.status == 404:
+                if i == 3:
+                    sys.exit(kWarning + "Not found. Terminating script." + kReset)
+                else:
+                    print kWarning + "Not found." + kReset
+            elif header.status == 403:
+                if i == 3:
+                    sys.exit(kWarning + "403 Forbidden. Terminating script." + kReset)
+                else:
+                    print kWarning + "403 Forbidden." + kReset
+            else:
+                if i % 2 == 0:
+                    naLink, euwLink = links[0], links[2]
+                else:
+                    naLink, euwLink = links[1], links[3]
+                break
+
+        print kSuccess + "Post found!" + kReset + "\n"
+
+    return content, dateRange, naLink, euwLink or "#"
 
 def saleOutput(sale):
     if sale.isSkin == True:
@@ -121,23 +140,24 @@ def saleOutput(sale):
         except IndexError:
             pass
 
-        spotlightString = "[Champion Spotlight]({0})".format(sale.spotlight)
+        spotlightString = "[Champion Spotlight]({0}), ".format(sale.spotlight) or ""
         imageString = "[Splash Art](http://riot-web-static.s3.amazonaws.com/images/news/Champ_Splashes/{0}_Splash.jpg)".format(champName)
 
     champLink = "http://leagueoflegends.wikia.com/wiki/" + champName.replace(" ", "_")
     iconName = re.sub('\ |\.|\'', '', champName.lower())
     icon = "[](/{0})".format(iconName)
 
-    return "|" + icon + "|**[" + sale.name + "](" + champLink + ")**|" + str(sale.sale) + " RP|" + str(sale.regular) + " RP|" + spotlightString + ", " + imageString + "|"
+    return "|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}{6}|" \
+        .format(icon, sale.name, champLink, str(sale.sale), str(sale.regular), spotlightString, imageString)
 
-def makePost(saleArray, naLink, euwLink, dateRange):
+def makePost(saleArray, dateRange, naLink, euwLink = "#"):
     # Automate rotation of sale rotation
     rotationSchedule = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
     nextRotation = rotationSchedule[lastrun.rotation % 4]
 
     faqArray = [
     ("I recently bought one of these skins/champions.",
-        "Generally, if you made the purchase within the past two weeks, you can [open a support ticket](https://support.leagueoflegends.com/anonymous_requests/new) and have the difference refunded. However, since the full May sale schedule was [already posted](http://na.leagueoflegends.com/en/news/store/sales/may-champion-and-skin-sale-schedule), partial refunds will not be offered for the sales announced."),
+        "Since the full May sale schedule was [already posted](http://na.leagueoflegends.com/en/news/store/sales/may-champion-and-skin-sale-schedule), partial refunds will not be offered for the sales announced in the schedule."),
     ("How do you know the prices of the next skin sale?",
         "The skin sales follow a [four-stage rotation](http://forums.na.leagueoflegends.com/board/showthread.php?t=3651816)."),
     ("How does this bot work?",
@@ -182,86 +202,9 @@ def submitPost(postTitle, postBody):
 
     print kSuccess + "Updated lastrun.py." + kReset
 
-def manualPost():
-    rotationSchedule = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
-    thisRotation = rotationSchedule[((lastrun.rotation + 4) % 4) - 1]
-    lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, "%Y-%m-%d")
-
-    # Offset sale start by one day if lastrun.rotation == 0 or 2
-    saleDefault = lastSaleEnd + datetime.timedelta((lastrun.rotation + 1) % 2)
-
-    try:
-        saleStart = datetime.datetime.strptime(raw_input("Enter sale starting date [{0}]: ".format(saleDefault.strftime("%Y-%m-%d"))), "%Y-%m-%d")
-    except ValueError:
-        saleStart = saleDefault
-
-    saleEnd = saleStart + datetime.timedelta(3)
-
-    naLink = "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}" \
-        .format(saleStart.strftime("%-m%d"), saleEnd.strftime("%-m%d"))
-    euwLink = "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}" \
-        .format(saleStart.strftime("%d%-m"), saleEnd.strftime("%d%-m"))
-
-    if saleStart.month == saleEnd.month:
-        dateRange = "({0}–{1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
-    else:
-        dateRange = "({0} – {1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
-
-    saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
-
-    # Skins
-    for sale in saleArray:
-        if sale.__class__ is Skin:
-            thisRegular = thisRotation[saleArray.index(sale)]
-            print "Skin #{0}:".format(saleArray.index(sale)+1)
-            sale.name = raw_input("Name: ".format(thisRegular))
-            try:
-                sale.name.rsplit(' ', 1)[1]
-            except IndexError:
-                champName = raw_input("Champion name: ")
-                saleTitle = raw_input("Sale title: ")
-                regular = raw_input("Regular cost [{0} RP]".format(thisRegular)) or thisRegular
-            else:
-                champName = raw_input("Champion name [{0}]: ".format(sale.name.rsplit(' ', 1)[1])).replace(" ", "") or sale.name.rsplit(' ', 1)[1]
-                saleTitle = raw_input("Sale title [{0}]: ".format(sale.name.rsplit(' ', 1)[0])).replace(" ", "") or sale.name.rsplit(' ', 1)[0]
-                regular = raw_input("Regular cost [{0} RP]".format(thisRegular)) or thisRegular
-            sale.regular = int(regular)
-            sale.sale = int(math.floor(sale.regular / 2))
-            sale.splash = "http://riot-web-static.s3.amazonaws.com/images/news/Skin_Sales/{0}_{1}_Splash.jpg".format(champName, saleTitle)
-            sale.inGame = "http://riot-web-static.s3.amazonaws.com/images/news/Skin_Sales/{0}_{1}_SS.jpg".format(champName, saleTitle)
-        else:
-            print "Champion #{0}:".format(saleArray.index(sale)-2)
-            sale.name = raw_input("Name: ")
-            sale.regular = int(raw_input("Regular price: "))
-            sale.sale = int(math.floor(sale.regular / 2))
-            saleName = sale.name.replace('.', '')
-            if saleName == "Jarvan IV":
-                saleName = "Jarvan"
-            try:
-                saleName = saleName.rsplit(' ', 1)[0] + saleName.rsplit(' ', 1)[1].lower()
-            except IndexError:
-                pass
-
-            sale.splash = "http://riot-web-static.s3.amazonaws.com/images/news/Champ_Splashes/{0}_Splash.jpg".format(saleName)
-
-    print "\n"
-    postTitle, postBody = makePost(saleArray, naLink, euwLink, dateRange)
-    print kSpecial + postTitle + kReset
-    for sale in saleArray:
-        print sale + "\n"
-
-    prompt = raw_input("Post to Reddit? (Y/N) ")
-    if prompt == "Y" or prompt == "y":
-        pass
-    else:
-        print kWarning + "Did not post to Reddit." + kReset
-        sys.exit(0)
-
-    submitPost(postTitle, postBody)
-    sys.exit(0)
 
 def getSpotlight(name, isSkin):
-    content = None
+    content, slug = None, None
     if isSkin:
         url = "https://www.youtube.com/user/SkinSpotlights/search?query=" + name.replace(" ", "+") + "+skin+spotlight"
         header, content = httplib2.Http().request(url)
@@ -271,11 +214,23 @@ def getSpotlight(name, isSkin):
 
     vidRegex = re.compile("<h3 class=\"yt-lockup-title\"><a .* href=\"(\S*)\">.*<\/a><\/h3>")
 
-    # Grabs URL of first result
-    return "https://www.youtube.com" + re.findall(vidRegex, content)[0]
+    try:
+        slug = re.findall(vidRegex, content)[0]
+    except IndexError:
+        sys.exit(kWarning + "Invalid YouTube lookup" + kReset)
+    else:
+        return "https://www.youtube.com" + slug
 
-def main():
-    content, dateRange, naLink, euwLink = getContent()
+
+if __name__ == "__main__":
+    testLink = False
+    try:
+        sys.argv[1]
+    except IndexError:
+        content, dateRange, naLink, euwLink = getContent()
+    else:
+        testLink = True
+        content, dateRange, naLink, euwLink = getContent(sys.argv[1])
 
     saleRegex = re.compile("<h4>(?:<a href.+?>)*\s*?(.+?)\s*?(?:<\/a>)*<\/h4>\s+?<strike.*?>(\d{3,4})<\/strike> (\d{3,4}) RP")
     imageRegex = re.compile("(http://riot-web-static\.s3\.amazonaws\.com/images/news/Skin_Sales/\S*?\.jpg)")
@@ -289,21 +244,14 @@ def main():
             saleArray[i].splash = re.findall(imageRegex, content)[(i*4)]
             saleArray[i].inGame = re.findall(imageRegex, content)[(i*4)+2]
 
-    postTitle, postBody = makePost(saleArray, naLink, euwLink, dateRange)
+    postTitle, postBody = makePost(saleArray, dateRange, naLink, euwLink)
 
     print kSpecial + postTitle + kReset
+
     for sale in saleArray:
-        print "{0} ({1})".format(sale.name, sale.sale)
+        print "{0} ({1} RP), {2}".format(sale.name, sale.sale, sale.spotlight or "No spotlight found")
 
-    submitPost(postTitle, postBody)
+    if not testLink:
+        submitPost(postTitle, postBody)
+
     sys.exit(0)
-
-
-if __name__ == "__main__":
-    try:
-        sys.argv[1]
-    except IndexError:
-        main()
-    else:
-        if sys.argv[1] == "-m":
-            manualPost()
