@@ -1,7 +1,7 @@
 #! /usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os, sys, re, math, datetime
+import os, sys, re, datetime
 import httplib2, praw
 import settings, lastrun
 
@@ -27,6 +27,11 @@ def getContent(testLink = None):
             header, content = httplib2.Http().request(testLink)
         except httplib2.ServerNotFoundError:
             sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
+
+        if header.status == 404:
+            sys.exit(kWarning + "Not found. Terminating script." + kReset)
+        elif header.status == 403:
+            sys.exit(kWarning + "403 Forbidden. Terminating script." + kReset)
 
         start, end = re.findall(".*(\d{4})-(\d{4})", testLink)[0]
 
@@ -74,16 +79,18 @@ def getContent(testLink = None):
             except httplib2.ServerNotFoundError:
                 sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
 
-            print "Requesting {0}".format(links[i])
+            print "Requesting {0}...".format(links[i]),
 
             if header.status == 404:
                 if i == 3:
-                    sys.exit(kWarning + "Not found. Terminating script." + kReset)
+                    print kWarning + "Not found." + kReset
+                    sys.exit(kWarning + "Terminating script." + kReset)
                 else:
                     print kWarning + "Not found." + kReset
             elif header.status == 403:
                 if i == 3:
-                    sys.exit(kWarning + "403 Forbidden. Terminating script." + kReset)
+                    print kWarning + "403 Forbidden." + kReset
+                    sys.exit(kWarning + "Terminating script." + kReset)
                 else:
                     print kWarning + "403 Forbidden." + kReset
             else:
@@ -95,7 +102,7 @@ def getContent(testLink = None):
 
         print kSuccess + "Post found!" + kReset + "\n"
 
-    return content, dateRange, naLink, euwLink or "#"
+    return content, dateRange, naLink, euwLink or "/#"
 
 def saleOutput(sale):
     if sale.isSkin == True:
@@ -129,7 +136,7 @@ def saleOutput(sale):
 
         else: champName = sale.name.rsplit(' ', 1)[1]
 
-        spotlightString = "[Skin Spotlight]({0})".format(sale.spotlight)
+        spotlightString = "**[Skin Spotlight]({0})**, ".format(sale.spotlight) or ""
         imageString = "[Splash Art]({0}), [In-Game]({1})".format(sale.splash, sale.inGame)
     else: # sale.isSkin == False
         champName = sale.name.replace('.', '')
@@ -140,7 +147,7 @@ def saleOutput(sale):
         except IndexError:
             pass
 
-        spotlightString = "[Champion Spotlight]({0}), ".format(sale.spotlight) or ""
+        spotlightString = "**[Champion Spotlight]({0})**, ".format(sale.spotlight) or ""
         imageString = "[Splash Art](http://riot-web-static.s3.amazonaws.com/images/news/Champ_Splashes/{0}_Splash.jpg)".format(champName)
 
     champLink = "http://leagueoflegends.wikia.com/wiki/" + champName.replace(" ", "_")
@@ -150,7 +157,7 @@ def saleOutput(sale):
     return "|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}{6}|" \
         .format(icon, sale.name, champLink, str(sale.sale), str(sale.regular), spotlightString, imageString)
 
-def makePost(saleArray, dateRange, naLink, euwLink = "#"):
+def makePost(saleArray, dateRange, naLink, euwLink = "/#"):
     # Automate rotation of sale rotation
     rotationSchedule = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
     nextRotation = rotationSchedule[lastrun.rotation % 4]
@@ -181,7 +188,7 @@ def makePost(saleArray, dateRange, naLink, euwLink = "#"):
         "Next skin sale: **{0} RP, {1} RP, {2} RP**. ".format(nextRotation[0], nextRotation[1], nextRotation[2]) +
         "Link to sale pages ([NA]({0}), [EUW]({1})).".format(naLink, euwLink) + '\n\n----\n\n' +
         "### Frequently Asked Questions\n\n" + faq + '----\n'
-        "^This ^bot ^was ^written ^by ^/u/Pewqazz. ^Feedback, ^suggestions, ^and ^bug ^reports ^are ^welcomed ^in ^/r/LeagueSalesBot."
+        "^Coded ^by ^/u/Pewqazz. ^Feedback, ^suggestions, ^and ^bug ^reports ^are ^welcomed ^in ^/r/LeagueSalesBot."
     )
 
 def submitPost(postTitle, postBody):
@@ -212,14 +219,14 @@ def getSpotlight(name, isSkin):
         url = "https://www.youtube.com/user/RiotGamesInc/search?query=" + name.replace(" ", "+") + "+champion+spotlight"
         header, content = httplib2.Http().request(url)
 
-    vidRegex = re.compile("<h3 class=\"yt-lockup-title\"><a .* href=\"(\S*)\">.*<\/a><\/h3>")
+    vidRegex = re.compile("<h3 class=\"yt-lockup-title\"><a .* href=\"(\S*)\">(.*)<\/a><\/h3>")
 
     try:
-        slug = re.findall(vidRegex, content)[0]
+        slug, vidTitle = re.findall(vidRegex, content)[0]
     except IndexError:
         sys.exit(kWarning + "Invalid YouTube lookup" + kReset)
     else:
-        return "https://www.youtube.com" + slug
+        return "https://www.youtube.com" + slug, vidTitle
 
 
 if __name__ == "__main__":
@@ -238,7 +245,7 @@ if __name__ == "__main__":
 
     for i in range(0, 6):
         saleArray[i].name, saleArray[i].regular, saleArray[i].sale = re.findall(saleRegex, content)[i]
-        saleArray[i].spotlight = getSpotlight(saleArray[i].name, saleArray[i].isSkin)
+        saleArray[i].spotlight, saleArray[i].vidTitle = getSpotlight(saleArray[i].name, saleArray[i].isSkin)
 
         if saleArray[i].__class__ is Skin:
             saleArray[i].splash = re.findall(imageRegex, content)[(i*4)]
@@ -249,7 +256,7 @@ if __name__ == "__main__":
     print kSpecial + postTitle + kReset
 
     for sale in saleArray:
-        print "{0} ({1} RP), {2}".format(sale.name, sale.sale, sale.spotlight or "No spotlight found")
+        print "{0} ({1} RP), {2}".format(sale.name, sale.sale, sale.vidTitle or "No spotlight found")
 
     if not testLink:
         submitPost(postTitle, postBody)
