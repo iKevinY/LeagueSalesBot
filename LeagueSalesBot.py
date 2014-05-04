@@ -22,14 +22,14 @@ kReset = '\033[0m'
 def getContent(testLink = None):
     if testLink:
         naLink = testLink
-        euwLink = None
+        euwLink = "/#"
         try:
             header, content = httplib2.Http().request(testLink)
         except httplib2.ServerNotFoundError:
             sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
 
         if header.status == 404:
-            sys.exit(kWarning + "Not found. Terminating script." + kReset)
+            sys.exit(kWarning + "Not Found. Terminating script." + kReset)
         elif header.status == 403:
             sys.exit(kWarning + "403 Forbidden. Terminating script." + kReset)
 
@@ -71,7 +71,7 @@ def getContent(testLink = None):
         else:
             dateRange = "({0} – {1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
 
-        print "Last sale ended on {0}.".format(lastrun.lastSaleEnd)
+        print "Last sale ended on {0}.".format(lastSaleEnd.strftime("%B %-d"))
 
         for i in range(len(links)):
             try:
@@ -79,14 +79,14 @@ def getContent(testLink = None):
             except httplib2.ServerNotFoundError:
                 sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
 
-            print "Requesting {0}...".format(links[i]),
+            print "Requesting {0}...{1}".format(links[i], " " * ("http://na" in links[i])),
 
             if header.status == 404:
                 if i == 3:
-                    print kWarning + "Not found." + kReset
+                    print kWarning + "404 Not Found." + kReset
                     sys.exit(kWarning + "Terminating script." + kReset)
                 else:
-                    print kWarning + "Not found." + kReset
+                    print kWarning + "404 Not Found." + kReset
             elif header.status == 403:
                 if i == 3:
                     print kWarning + "403 Forbidden." + kReset
@@ -102,7 +102,7 @@ def getContent(testLink = None):
 
         print kSuccess + "Post found!" + kReset + "\n"
 
-    return content, dateRange, naLink, euwLink or "/#"
+    return content, dateRange, naLink, euwLink
 
 def saleOutput(sale):
     if sale.isSkin == True:
@@ -136,7 +136,7 @@ def saleOutput(sale):
 
         else: champName = sale.name.rsplit(' ', 1)[1]
 
-        spotlightString = "**[Skin Spotlight]({0})**, ".format(sale.spotlight) or ""
+        spotlightString = "**[Skin Spotlight]({0})**, ".format(sale.spotlight)
         imageString = "[Splash Art]({0}), [In-Game]({1})".format(sale.splash, sale.inGame)
     else: # sale.isSkin == False
         champName = sale.name.replace('.', '')
@@ -147,7 +147,7 @@ def saleOutput(sale):
         except IndexError:
             pass
 
-        spotlightString = "**[Champion Spotlight]({0})**, ".format(sale.spotlight) or ""
+        spotlightString = "**[Champion Spotlight]({0})**, ".format(sale.spotlight)
         imageString = "[Splash Art](http://riot-web-static.s3.amazonaws.com/images/news/Champ_Splashes/{0}_Splash.jpg)".format(champName)
 
     champLink = "http://leagueoflegends.wikia.com/wiki/" + champName.replace(" ", "_")
@@ -168,7 +168,7 @@ def makePost(saleArray, dateRange, naLink, euwLink = "/#"):
     ("How do you know the prices of the next skin sale?",
         "The skin sales follow a [four-stage rotation](http://forums.na.leagueoflegends.com/board/showthread.php?t=3651816)."),
     ("How does this bot work?",
-        "/u/LeagueSalesBot is written in [Python](http://www.python.org/). It uses the [PRAW](https://praw.readthedocs.org/en/latest/) library to interface with Reddit's [API](http://www.reddit.com/dev/api) and [httplib2](http://code.google.com/p/httplib2/) to retrieve data from sale pages.")
+        "/u/LeagueSalesBot is written in [Python](http://www.python.org/). It uses the [PRAW](https://praw.readthedocs.org/en/latest/) library to interface with [Reddit's API](http://www.reddit.com/dev/api) and [httplib2](https://github.com/jcgregorio/httplib2) to crawl the sale pages.")
     ]
 
     faq = ""
@@ -214,17 +214,15 @@ def getSpotlight(name, isSkin):
     content, slug = None, None
     if isSkin:
         url = "https://www.youtube.com/user/SkinSpotlights/search?query=" + name.replace(" ", "+") + "+skin+spotlight"
-        header, content = httplib2.Http().request(url)
     else:
         url = "https://www.youtube.com/user/RiotGamesInc/search?query=" + name.replace(" ", "+") + "+champion+spotlight"
-        header, content = httplib2.Http().request(url)
 
-    vidRegex = re.compile("<h3 class=\"yt-lockup-title\"><a .* href=\"(\S*)\">(.*)<\/a><\/h3>")
+    header, content = httplib2.Http().request(url)
 
     try:
-        slug, vidTitle = re.findall(vidRegex, content)[0]
+        slug, vidTitle = re.findall("<h3 class=\"yt-lockup-title\"><a .* href=\"(\S*)\">(.*)<\/a><\/h3>", content)[0]
     except IndexError:
-        sys.exit(kWarning + "Invalid YouTube lookup" + kReset)
+        return "/#", None
     else:
         return "https://www.youtube.com" + slug, vidTitle
 
@@ -243,22 +241,25 @@ if __name__ == "__main__":
     imageRegex = re.compile("(http://riot-web-static\.s3\.amazonaws\.com/images/news/Skin_Sales/\S*?\.jpg)")
     saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
 
-    for i in range(0, 6):
-        saleArray[i].name, saleArray[i].regular, saleArray[i].sale = re.findall(saleRegex, content)[i]
-        saleArray[i].spotlight, saleArray[i].vidTitle = getSpotlight(saleArray[i].name, saleArray[i].isSkin)
+    for sale in saleArray:
+        i = saleArray.index(sale)
+        sale.name, sale.regular, sale.sale = re.findall(saleRegex, content)[i]
+        sale.spotlight, sale.vidTitle = getSpotlight(sale.name, sale.isSkin)
 
-        if saleArray[i].__class__ is Skin:
-            saleArray[i].splash = re.findall(imageRegex, content)[(i*4)]
-            saleArray[i].inGame = re.findall(imageRegex, content)[(i*4)+2]
+        # Print to terminal
+        if not testLink:
+            print "{0} ({1} RP), {2}".format(sale.name, sale.sale, sale.vidTitle or "No spotlight found")
+
+        if sale.isSkin:
+            sale.splash = re.findall(imageRegex, content)[(i*4)]
+            sale.inGame = re.findall(imageRegex, content)[(i*4)+2]
 
     postTitle, postBody = makePost(saleArray, dateRange, naLink, euwLink)
 
-    print kSpecial + postTitle + kReset
-
-    for sale in saleArray:
-        print "{0} ({1} RP), {2}".format(sale.name, sale.sale, sale.vidTitle or "No spotlight found")
-
     if not testLink:
+        print kSpecial + postTitle + kReset
         submitPost(postTitle, postBody)
+    else:
+        print postBody
 
     sys.exit(0)
