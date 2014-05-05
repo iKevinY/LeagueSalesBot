@@ -1,12 +1,12 @@
 #! /usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os, sys, re, datetime
+import os, sys, re, datetime, time
 import httplib2, praw
 import settings, lastrun
 
 # Create classes for sale types (skins and champions)
-class Sale:
+class Sale():
     pass
 class Skin(Sale):
     isSkin = True
@@ -21,22 +21,26 @@ kReset = '\033[0m'
 
 def getContent(testLink = None):
     if testLink:
-        naLink = testLink
-        euwLink = "/#"
+        if "//na" in testLink:
+            naLink, euwLink = testLink, "/#"
+        else:
+            naLink, euwLink = "/#", testLink
+
+        print testLink + "...",
+
         try:
             header, content = httplib2.Http().request(testLink)
         except httplib2.ServerNotFoundError:
             sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
 
-        if header.status == 404:
-            sys.exit(kWarning + "Not Found. Terminating script." + kReset)
-        elif header.status == 403:
-            sys.exit(kWarning + "403 Forbidden. Terminating script." + kReset)
-
-        start, end = re.findall(".*(\d{4})-(\d{4})", testLink)[0]
-
-        saleStart = datetime.datetime.strptime(start, "%m%d")
-        saleEnd = datetime.datetime.strptime(end, "%m%d")
+        if header.status != 200:
+            print (kWarning + str(header.status) + kReset)
+            sys.exit(kWarning + "Terminating script." + kReset)
+        else:
+            print kSuccess + "200" + kReset
+            start, end = re.findall(".*(\d{4})-(\d{4})", testLink)[0]
+            saleStart = datetime.datetime.strptime(start, "%m%d")
+            saleEnd = datetime.datetime.strptime(end, "%m%d")
 
     else:
         # Get string of end of last sale from lastrun.py
@@ -50,10 +54,8 @@ def getContent(testLink = None):
         saleEnd = saleStart + datetime.timedelta(3)
 
         # Insert leading hyphen to strip leading zero
-        mdStart = saleStart.strftime("%m%d")
-        mdEnd = saleEnd.strftime("%m%d")
-        dmStart = saleStart.strftime("%d%m")
-        dmEnd = saleEnd.strftime("%d%m")
+        mdStart, mdEnd = saleStart.strftime("%m%d"), saleEnd.strftime("%m%d")
+        dmStart, dmEnd = saleStart.strftime("%d%m"), saleEnd.strftime("%d%m")
 
         links = [
             "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd),
@@ -62,33 +64,33 @@ def getContent(testLink = None):
             "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd)
         ]
 
-        print "Last sale ended on " + kSpecial + lastSaleEnd.strftime("%B %-d") + kReset + "."
+        print "Last sale ended on " + kSpecial + lastSaleEnd.strftime("%B %-d") + kReset + ". Requesting sale pages."
 
-        for link in links:
-            try:
-                header, content = httplib2.Http().request(link)
-            except httplib2.ServerNotFoundError:
-                sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
+        naLink, euwLink = None, None
 
-            print "Requesting {0}...{1}".format(link, " " * ("http://na" in link)),
+        while (not naLink) and (not euwLink):
+            for link in links:
+                try:
+                    header, content = httplib2.Http().request(link)
+                except httplib2.ServerNotFoundError:
+                    sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
 
-            i = links.index(link)
+                print link + "..." + ' ' * ("//na" in link),
 
-            if header.status == 404:
-                if i == 3:
-                    print kWarning + "404 Not Found." + kReset
-                    sys.exit(kWarning + "Terminating script." + kReset)
+                if header.status != 200:
+                    print kWarning + str(header.status) + kReset
                 else:
-                    print kWarning + "404 Not Found." + kReset
-            elif header.status == 403:
-                if i == 3:
-                    print kWarning + "403 Forbidden." + kReset
-                    sys.exit(kWarning + "Terminating script." + kReset)
-                else:
-                    print kWarning + "403 Forbidden." + kReset
+                    print kSuccess + "200" + kReset
+                    i = links.index(link)
+                    naLink, euwLink = links[i % 2], links[i % 2 + 2]
+                    found = True
+                    break
             else:
-                naLink, euwLink = links[i % 2], links[i % 2 + 2]
-                break
+                if "-r" in sys.argv:
+                    print "Sleeping for 10 (c-X to force quit)..."
+                    time.sleep(10)
+                else:
+                    sys.exit(kWarning + "Terminating script." + kReset)
 
         print kSuccess + "Post found!" + kReset + "\n"
 
@@ -100,40 +102,40 @@ def getContent(testLink = None):
     return content, dateRange, naLink, euwLink
 
 def saleOutput(sale):
-    if sale.isSkin == True:
+    if sale.isSkin:
         # Try all exception skins (reference: http://leagueoflegends.wikia.com/wiki/Champion_skin)
-        if   re.compile(".*? Mundo").match(sale.name):          champName = "Dr. Mundo"
-        elif re.compile(".*? Jarvan IV").match(sale.name):      champName = "Jarvan IV"
-        elif re.compile(".*? Lee Sin").match(sale.name):        champName = "Lee Sin"
-        elif re.compile(".*? Master Yi").match(sale.name):      champName = "Master Yi"
-        elif re.compile(".*? Miss Fortune").match(sale.name):   champName = "Miss Fortune"
-        elif re.compile(".*? Twisted Fate").match(sale.name):   champName = "Twisted Fate"
-        elif re.compile(".*? Xin Zhao").match(sale.name):       champName = "Xin Zhao"
+        if   re.match(".*? Mundo", sale.name):        champName = "Dr. Mundo"
+        elif re.match(".*? Jarvan IV", sale.name):    champName = "Jarvan IV"
+        elif re.match(".*? Lee Sin", sale.name):      champName = "Lee Sin"
+        elif re.match(".*? Master Yi", sale.name):    champName = "Master Yi"
+        elif re.match(".*? Miss Fortune", sale.name): champName = "Miss Fortune"
+        elif re.match(".*? Twisted Fate", sale.name): champName = "Twisted Fate"
+        elif re.match(".*? Xin Zhao", sale.name):     champName = "Xin Zhao"
 
-        elif sale.name == "Emumu":                              champName = "Amumu"
-        elif sale.name == "Annie In Wonderland":                champName = "Annie"
-        elif sale.name == "iBlitzcrank":                        champName = "Blitzcrank"
-        elif sale.name == "Mr. Mundoverse":                     champName = "Dr. Mundo"
-        elif sale.name == "Gragas, Esq":                        champName = "Gragas"
-        elif sale.name == "Snowmerdinger":                      champName = "Heimerdinger"
-        elif sale.name == "Jaximus":                            champName = "Jax"
-        elif sale.name == "Kennen M.D.":                        champName = "Kennen"
-        elif sale.name == "Samurai Yi":                         champName = "Master Yi"
-        elif sale.name == "AstroNautilus":                      champName = "Nautilus"
-        elif sale.name == "Nunu Bot":                           champName = "Nunu"
-        elif sale.name == "Brolaf":                             champName = "Olaf"
-        elif sale.name == "Lollipoppy":                         champName = "Poppy"
-        elif sale.name == "Rumble in the Jungle":               champName = "Rumble"
-        elif sale.name == "Nutcracko":                          champName = "Shaco"
-        elif sale.name == "Jack of Hearts":                     champName = "Twisted Fate"
-        elif sale.name == "Giant Enemy Crabgot":                champName = "Urgot"
-        elif sale.name == "Urf the Manatee":                    champName = "Warwick"
+        elif sale.name == "Emumu":                    champName = "Amumu"
+        elif sale.name == "Annie In Wonderland":      champName = "Annie"
+        elif sale.name == "iBlitzcrank":              champName = "Blitzcrank"
+        elif sale.name == "Mr. Mundoverse":           champName = "Dr. Mundo"
+        elif sale.name == "Gragas, Esq":              champName = "Gragas"
+        elif sale.name == "Snowmerdinger":            champName = "Heimerdinger"
+        elif sale.name == "Jaximus":                  champName = "Jax"
+        elif sale.name == "Kennen M.D.":              champName = "Kennen"
+        elif sale.name == "Samurai Yi":               champName = "Master Yi"
+        elif sale.name == "AstroNautilus":            champName = "Nautilus"
+        elif sale.name == "Nunu Bot":                 champName = "Nunu"
+        elif sale.name == "Brolaf":                   champName = "Olaf"
+        elif sale.name == "Lollipoppy":               champName = "Poppy"
+        elif sale.name == "Rumble in the Jungle":     champName = "Rumble"
+        elif sale.name == "Nutcracko":                champName = "Shaco"
+        elif sale.name == "Jack of Hearts":           champName = "Twisted Fate"
+        elif sale.name == "Giant Enemy Crabgot":      champName = "Urgot"
+        elif sale.name == "Urf the Manatee":          champName = "Warwick"
 
-        else: champName = sale.name.rsplit(' ', 1)[1]
+        else: champName = sale.name.rsplit(' ', 1)[1] # Champion name is final word of skin name
 
         spotlightString = "**[Skin Spotlight]({0})**, ".format(sale.spotlight)
         imageString = "[Splash Art]({0}), [In-Game]({1})".format(sale.splash, sale.inGame)
-    else: # sale.isSkin == False
+    else:
         champName = sale.name.replace('.', '')
         if champName == "Jarvan IV":
             champName = "Jarvan"
@@ -157,7 +159,7 @@ def makePost(saleArray, dateRange, naLink, euwLink = "/#"):
 
     faqArray = [
     ("I recently bought one of these skins/champions.",
-        "Since the full May sale schedule was [already posted](http://na.leagueoflegends.com/en/news/store/sales/may-champion-and-skin-sale-schedule), partial refunds will not be offered for the sales announced in the schedule."),
+        "Since the (full May sale schedule)[http://na.leagueoflegends.com/en/news/store/sales/may-champion-and-skin-sale-schedule] has already been posted, partial refunds are not being offered."),
     ("How do you know the prices of the next skin sale?",
         "The skin sales follow a [four-stage rotation](http://forums.na.leagueoflegends.com/board/showthread.php?t=3651816)."),
     ("How does this bot work?",
@@ -174,7 +176,7 @@ def makePost(saleArray, dateRange, naLink, euwLink = "/#"):
 
     postTitle = "[Skin Sale] " + saleArray[0].name + ", " + saleArray[1].name + ", " + saleArray[2].name + " " + dateRange
 
-    return postTitle, (
+    postBody = (
         "| Icon | Skin/Champion | Sale Price | Regular Price | Media |\n" +
         "|:----:|:-------------:|:----------:|:-------------:|:-----:|\n" +
         sales + '\n'
@@ -183,6 +185,26 @@ def makePost(saleArray, dateRange, naLink, euwLink = "/#"):
         "### Frequently Asked Questions\n\n" + faq + '----\n'
         "^Coded ^by ^/u/Pewqazz. ^Feedback, ^suggestions, ^and ^bug ^reports ^are ^welcomed ^in ^/r/LeagueSalesBot."
     )
+
+    return postTitle, postBody
+
+
+def getSpotlight(name, isSkin):
+    content, slug = None, None
+    if isSkin:
+        url = "https://www.youtube.com/user/SkinSpotlights/search?query=" + name.replace(" ", "+") + "+skin+spotlight"
+    else:
+        url = "https://www.youtube.com/user/RiotGamesInc/search?query=" + name.replace(" ", "+") + "+champion+spotlight"
+
+    header, content = httplib2.Http().request(url)
+
+    try:
+        slug, vidTitle = re.findall("<h3 class=\"yt-lockup-title\"><a .* href=\"(\S*)\">(.*)<\/a><\/h3>", content)[0]
+    except IndexError:
+        return "/#", None
+    else:
+        return "https://www.youtube.com" + slug, vidTitle
+
 
 def submitPost(postTitle, postBody):
     r = praw.Reddit(user_agent=settings.userAgent)
@@ -203,33 +225,7 @@ def submitPost(postTitle, postBody):
     print kSuccess + "Updated lastrun.py." + kReset
 
 
-def getSpotlight(name, isSkin):
-    content, slug = None, None
-    if isSkin:
-        url = "https://www.youtube.com/user/SkinSpotlights/search?query=" + name.replace(" ", "+") + "+skin+spotlight"
-    else:
-        url = "https://www.youtube.com/user/RiotGamesInc/search?query=" + name.replace(" ", "+") + "+champion+spotlight"
-
-    header, content = httplib2.Http().request(url)
-
-    try:
-        slug, vidTitle = re.findall("<h3 class=\"yt-lockup-title\"><a .* href=\"(\S*)\">(.*)<\/a><\/h3>", content)[0]
-    except IndexError:
-        return "/#", None
-    else:
-        return "https://www.youtube.com" + slug, vidTitle
-
-
-if __name__ == "__main__":
-    testLink = False
-    try:
-        sys.argv[1]
-    except IndexError:
-        content, dateRange, naLink, euwLink = getContent()
-    else:
-        testLink = True
-        content, dateRange, naLink, euwLink = getContent(sys.argv[1])
-
+def parseData(content):
     saleRegex = re.compile("<h4>(?:<a href.+?>)*\s*?(.+?)\s*?(?:<\/a>)*<\/h4>\s+?<strike.*?>(\d{3,4})<\/strike> (\d{3,4}) RP")
     imageRegex = re.compile("(http://riot-web-static\.s3\.amazonaws\.com/images/news/Skin_Sales/\S*?\.jpg)")
     saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
@@ -239,20 +235,36 @@ if __name__ == "__main__":
         sale.name, sale.regular, sale.sale = re.findall(saleRegex, content)[i]
         sale.spotlight, sale.vidTitle = getSpotlight(sale.name, sale.isSkin)
 
-        # Print to terminal
-        if not testLink:
+        if not "-v" in sys.argv:
             print "{0} ({1} RP), {2}".format(sale.name, sale.sale, sale.vidTitle or "No spotlight found")
 
         if sale.isSkin:
             sale.splash = re.findall(imageRegex, content)[(i*4)]
             sale.inGame = re.findall(imageRegex, content)[(i*4)+2]
 
+    return saleArray
+
+if __name__ == "__main__":
+    if len(sys.argv) != 1:
+        testLink = "http://" in sys.argv[1]
+    else:
+        testLink = False
+
+    if testLink:
+        content, dateRange, naLink, euwLink = getContent(sys.argv[1])
+    else:
+        content, dateRange, naLink, euwLink = getContent()
+
+    saleArray = parseData(content)
     postTitle, postBody = makePost(saleArray, dateRange, naLink, euwLink)
 
-    if not testLink:
-        print kSpecial + postTitle + kReset
-        submitPost(postTitle, postBody)
-    else:
+    if "-v" in sys.argv:
         print postBody
+    else:
+        print kSpecial + postTitle + kReset
+
+    if not testLink:
+        submitPost(postTitle, postBody)
+        pass
 
     sys.exit(0)
