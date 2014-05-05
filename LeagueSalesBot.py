@@ -38,10 +38,6 @@ def getContent(testLink = None):
         saleStart = datetime.datetime.strptime(start, "%m%d")
         saleEnd = datetime.datetime.strptime(end, "%m%d")
 
-        if saleStart.month == saleEnd.month:
-            dateRange = "({0}–{1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
-        else:
-            dateRange = "({0} – {1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
     else:
         # Get string of end of last sale from lastrun.py
         lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, "%Y-%m-%d")
@@ -59,27 +55,24 @@ def getContent(testLink = None):
         dmStart = saleStart.strftime("%d%m")
         dmEnd = saleEnd.strftime("%d%m")
 
-        links = {}
-        links[0] = "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd)
-        links[1] = "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStart, dmEnd)
-        links[2] = "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStart, dmEnd)
-        links[3] = "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd)
-        naLink, euwLink = None, None
+        links = [
+            "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd),
+            "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStart, dmEnd),
+            "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStart, dmEnd),
+            "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd)
+        ]
 
-        if saleStart.month == saleEnd.month:
-            dateRange = "({0}–{1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
-        else:
-            dateRange = "({0} – {1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
+        print "Last sale ended on " + kSpecial + lastSaleEnd.strftime("%B %-d") + kReset + "."
 
-        print "Last sale ended on {0}.".format(lastSaleEnd.strftime("%B %-d"))
-
-        for i in range(len(links)):
+        for link in links:
             try:
-                header, content = httplib2.Http().request(links[i])
+                header, content = httplib2.Http().request(link)
             except httplib2.ServerNotFoundError:
                 sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
 
-            print "Requesting {0}...{1}".format(links[i], " " * ("http://na" in links[i])),
+            print "Requesting {0}...{1}".format(link, " " * ("http://na" in link)),
+
+            i = links.index(link)
 
             if header.status == 404:
                 if i == 3:
@@ -94,13 +87,15 @@ def getContent(testLink = None):
                 else:
                     print kWarning + "403 Forbidden." + kReset
             else:
-                if i % 2 == 0:
-                    naLink, euwLink = links[0], links[2]
-                else:
-                    naLink, euwLink = links[1], links[3]
+                naLink, euwLink = links[i % 2], links[i % 2 + 2]
                 break
 
         print kSuccess + "Post found!" + kReset + "\n"
+
+    if saleStart.month == saleEnd.month:
+        dateRange = "({0}–{1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
+    else:
+        dateRange = "({0} – {1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
 
     return content, dateRange, naLink, euwLink
 
@@ -154,11 +149,9 @@ def saleOutput(sale):
     iconName = re.sub('\ |\.|\'', '', champName.lower())
     icon = "[](/{0})".format(iconName)
 
-    return "|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}{6}|" \
-        .format(icon, sale.name, champLink, str(sale.sale), str(sale.regular), spotlightString, imageString)
+    return "|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}{6}|".format(icon, sale.name, champLink, str(sale.sale), str(sale.regular), spotlightString, imageString)
 
 def makePost(saleArray, dateRange, naLink, euwLink = "/#"):
-    # Automate rotation of sale rotation
     rotationSchedule = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
     nextRotation = rotationSchedule[lastrun.rotation % 4]
 
