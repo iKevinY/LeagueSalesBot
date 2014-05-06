@@ -26,7 +26,8 @@ def getContent(testLink = None):
         else:
             naLink, euwLink = "/#", testLink
 
-        print testLink + "...",
+        if not "-v" in sys.argv:
+            print testLink + "...",
 
         try:
             header, content = httplib2.Http().request(testLink)
@@ -37,7 +38,8 @@ def getContent(testLink = None):
             print (kWarning + str(header.status) + kReset)
             sys.exit(kWarning + "Terminating script." + kReset)
         else:
-            print kSuccess + "200" + kReset
+            if not "-v" in sys.argv:
+                print kSuccess + "200" + kReset
             start, end = re.findall(".*(\d{4})-(\d{4})", testLink)[0]
             saleStart = datetime.datetime.strptime(start, "%m%d")
             saleEnd = datetime.datetime.strptime(end, "%m%d")
@@ -83,7 +85,6 @@ def getContent(testLink = None):
                     print kSuccess + "200" + kReset
                     i = links.index(link)
                     naLink, euwLink = links[i % 2], links[i % 2 + 2]
-                    found = True
                     break
             else:
                 if "-r" in sys.argv:
@@ -103,74 +104,52 @@ def getContent(testLink = None):
 
 def saleOutput(sale):
     if sale.isSkin:
-        # Try all exception skins (reference: http://leagueoflegends.wikia.com/wiki/Champion_skin)
-        if   re.match(".*? Mundo", sale.name):        champName = "Dr. Mundo"
-        elif re.match(".*? Jarvan IV", sale.name):    champName = "Jarvan IV"
-        elif re.match(".*? Lee Sin", sale.name):      champName = "Lee Sin"
-        elif re.match(".*? Master Yi", sale.name):    champName = "Master Yi"
-        elif re.match(".*? Miss Fortune", sale.name): champName = "Miss Fortune"
-        elif re.match(".*? Twisted Fate", sale.name): champName = "Twisted Fate"
-        elif re.match(".*? Xin Zhao", sale.name):     champName = "Xin Zhao"
-
-        elif sale.name == "Emumu":                    champName = "Amumu"
-        elif sale.name == "Annie In Wonderland":      champName = "Annie"
-        elif sale.name == "iBlitzcrank":              champName = "Blitzcrank"
-        elif sale.name == "Mr. Mundoverse":           champName = "Dr. Mundo"
-        elif sale.name == "Gragas, Esq":              champName = "Gragas"
-        elif sale.name == "Snowmerdinger":            champName = "Heimerdinger"
-        elif sale.name == "Jaximus":                  champName = "Jax"
-        elif sale.name == "Kennen M.D.":              champName = "Kennen"
-        elif sale.name == "Samurai Yi":               champName = "Master Yi"
-        elif sale.name == "AstroNautilus":            champName = "Nautilus"
-        elif sale.name == "Nunu Bot":                 champName = "Nunu"
-        elif sale.name == "Brolaf":                   champName = "Olaf"
-        elif sale.name == "Lollipoppy":               champName = "Poppy"
-        elif sale.name == "Rumble in the Jungle":     champName = "Rumble"
-        elif sale.name == "Nutcracko":                champName = "Shaco"
-        elif sale.name == "Jack of Hearts":           champName = "Twisted Fate"
-        elif sale.name == "Giant Enemy Crabgot":      champName = "Urgot"
-        elif sale.name == "Urf the Manatee":          champName = "Warwick"
-
-        else: champName = sale.name.rsplit(' ', 1)[1] # Champion name is final word of skin name
+        # Champions with multi-part names
+        for k, v in settings.twoParters.iteritems():
+            if re.match(k, sale.name):
+                champName = v
+                break
+        else:
+            # Try all exception skins skins
+            for k, v in settings.exceptSkins.iteritems():
+                if sale.name == k:
+                    champName = v
+                    break
+            else:
+                champName = sale.name.rsplit(' ', 1)[1] # Champion name is final word of skin name
 
         spotlightString = "**[Skin Spotlight]({0})**, ".format(sale.spotlight)
         imageString = "[Splash Art]({0}), [In-Game]({1})".format(sale.splash, sale.inGame)
     else:
-        champName = sale.name.replace('.', '')
-        if champName == "Jarvan IV":
-            champName = "Jarvan"
+        champName = sale.name
+        # Generate correct splash art URL; champion name in URL is of format "Anivia", "Jarvan", "Masteryi", "Khazix"
+        splashName = sale.name.replace('.', '').replace("'", ' ')
+        if splashName == "Jarvan IV":
+            splashName = "Jarvan"
         try:
-            champName = champName.rsplit(' ', 1)[0] + champName.rsplit(' ', 1)[1].lower()
+            splashName = splashName.rsplit(' ', 1)[0] + splashName.rsplit(' ', 1)[1].lower()
         except IndexError:
             pass
 
         spotlightString = "**[Champion Spotlight]({0})**, ".format(sale.spotlight)
-        imageString = "[Splash Art](http://riot-web-static.s3.amazonaws.com/images/news/Champ_Splashes/{0}_Splash.jpg)".format(champName)
+        imageString = "[Splash Art](http://riot-web-static.s3.amazonaws.com/images/news/Champ_Splashes/{0}_Splash.jpg)".format(splashName)
 
     champLink = "http://leagueoflegends.wikia.com/wiki/" + champName.replace(" ", "_")
-    iconName = re.sub('\ |\.|\'', '', champName.lower())
+    iconName = re.sub('\ |\.|\'', '', champName.lower()) # Removes ' ', '.', and "'" characters from name
     icon = "[](/{0})".format(iconName)
 
-    return "|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}{6}|".format(icon, sale.name, champLink, str(sale.sale), str(sale.regular), spotlightString, imageString)
+    return "|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}{6}|".format(
+        icon, sale.name, champLink, str(sale.sale), str(sale.regular), spotlightString, imageString)
 
 def makePost(saleArray, dateRange, naLink, euwLink = "/#"):
     rotationSchedule = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
     nextRotation = rotationSchedule[lastrun.rotation % 4]
 
-    faqArray = [
-    ("I recently bought one of these skins/champions.",
-        "Since the (full May sale schedule)[http://na.leagueoflegends.com/en/news/store/sales/may-champion-and-skin-sale-schedule] has already been posted, partial refunds are not being offered."),
-    ("How do you know the prices of the next skin sale?",
-        "The skin sales follow a [four-stage rotation](http://forums.na.leagueoflegends.com/board/showthread.php?t=3651816)."),
-    ("How does this bot work?",
-        "/u/LeagueSalesBot is written in [Python](http://www.python.org/). It uses the [PRAW](https://praw.readthedocs.org/en/latest/) library to interface with [Reddit's API](http://www.reddit.com/dev/api) and [httplib2](https://github.com/jcgregorio/httplib2) to crawl the sale pages.")
-    ]
+    faq, sales = "", ""
 
-    faq = ""
-    for q in faqArray:
+    for q in settings.faqArray:
         faq = faq + "> **{0}**".format(q[0]) + "\n\n" + "{0}".format(q[1]) + "\n\n"
 
-    sales = ""
     for sale in saleArray:
         sales = sales + saleOutput(sale) + "\n"
 
@@ -190,7 +169,6 @@ def makePost(saleArray, dateRange, naLink, euwLink = "/#"):
 
 
 def getSpotlight(name, isSkin):
-    content, slug = None, None
     if isSkin:
         url = "https://www.youtube.com/user/SkinSpotlights/search?query=" + name.replace(" ", "+") + "+skin+spotlight"
     else:
@@ -235,7 +213,7 @@ def parseData(content):
         sale.name, sale.regular, sale.sale = re.findall(saleRegex, content)[i]
         sale.spotlight, sale.vidTitle = getSpotlight(sale.name, sale.isSkin)
 
-        if not "-v" in sys.argv:
+        if not "-v" in sys.argv: # Terminal output
             print "{0} ({1} RP), {2}".format(sale.name, sale.sale, sale.vidTitle or "No spotlight found")
 
         if sale.isSkin:
@@ -245,16 +223,9 @@ def parseData(content):
     return saleArray
 
 if __name__ == "__main__":
-    if len(sys.argv) != 1:
-        testLink = "http://" in sys.argv[1]
-    else:
-        testLink = False
+    testLink = next((sys.argv[i] for i, s in enumerate(sys.argv) if "http://" in s), None)
 
-    if testLink:
-        content, dateRange, naLink, euwLink = getContent(sys.argv[1])
-    else:
-        content, dateRange, naLink, euwLink = getContent()
-
+    content, dateRange, naLink, euwLink = getContent(testLink)
     saleArray = parseData(content)
     postTitle, postBody = makePost(saleArray, dateRange, naLink, euwLink)
 
