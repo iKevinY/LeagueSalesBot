@@ -7,11 +7,20 @@ import settings, lastrun
 
 # Create classes for sale types (skins and champions)
 class Sale():
-    pass
+    saleName = ""
+    regularCost = 0
+    saleCost = 0
+    champName = ""
+    wikiLink = ""
+    icon = "[](/)"
 class Skin(Sale):
     isSkin = True
+    skinName = ""
+    splash = ""
+    inGame = ""
 class Champ(Sale):
     isSkin = False
+    splashName = ""
 
 # Define variables for ANSI-coloured terminal messages
 kWarning = '\033[31m'
@@ -105,41 +114,38 @@ def getContent(testLink = None):
 def saleOutput(sale):
     if sale.isSkin:
         # Champions with multi-part names
-        for k, v in settings.twoParters.iteritems():
-            if re.match(k, sale.name):
-                champName = v
+	for key, value in settings.multiNames.iteritems():
+	    if re.match(key, sale.saleName):
+		sale.champName = value
                 break
         else:
             # Try all exception skins skins
-            for k, v in settings.exceptSkins.iteritems():
-                if sale.name == k:
-                    champName = v
+	    for key, v in settings.exceptSkins.iteritems():
+		if sale.saleName == key:
+		    sale.champName = value
                     break
             else:
-                champName = sale.name.rsplit(' ', 1)[1] # Champion name is final word of skin name
+		sale.champName = sale.saleName.rsplit(' ', 1)[1] # Champion name is final word of skin name
 
-        spotlightString = "**[Skin Spotlight]({0})**, ".format(sale.spotlight)
-        imageString = "[Splash Art]({0}), [In-Game]({1})".format(sale.splash, sale.inGame)
+	mediaString = "**[Skin Spotlight]({0})**, [Splash Art]({1}), [In-Game]({2})".format(sale.spotlight, sale.splash, sale.inGame)
     else:
-        champName = sale.name
         # Generate correct splash art URL; champion name in URL is of format "Anivia", "Jarvan", "Masteryi", "Khazix"
-        splashName = sale.name.replace('.', '').replace("'", ' ')
-        if splashName == "Jarvan IV":
-            splashName = "Jarvan"
+	sale.splashName = sale.saleName.replace('.', '').replace("'", ' ')
+	if sale.splashName == "Jarvan IV":
+	    sale.splashName = "Jarvan"
+
         try:
-            splashName = splashName.rsplit(' ', 1)[0] + splashName.rsplit(' ', 1)[1].lower()
+	    sale.splashName = sale.splashName.rsplit(' ', 1)[0] + sale.splashName.rsplit(' ', 1)[1].lower()
         except IndexError:
             pass
 
-        spotlightString = "**[Champion Spotlight]({0})**, ".format(sale.spotlight)
-        imageString = "[Splash Art](http://riot-web-static.s3.amazonaws.com/images/news/Champ_Splashes/{0}_Splash.jpg)".format(splashName)
+	sale.champName = sale.saleName
+	mediaString = "**[Champion Spotlight]({0})**, [Splash Art](http://riot-web-static.s3.amazonaws.com/images/news/Champ_Splashes/{1}_Splash.jpg))".format(sale.spotlight, sale.splashName)
 
-    champLink = "http://leagueoflegends.wikia.com/wiki/" + champName.replace(" ", "_")
-    iconName = re.sub('\ |\.|\'', '', champName.lower()) # Removes ' ', '.', and "'" characters from name
-    icon = "[](/{0})".format(iconName)
+    sale.wikiLink = "http://leagueoflegends.wikia.com/wiki/" + sale.champName.replace(" ", "_")
+    sale.icon = "[](/{0})".format(re.sub('\ |\.|\'', '', sale.champName.lower())) # Removes ' ', '.', and "'" characters from name
 
-    return "|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}{6}|".format(
-        icon, sale.name, champLink, str(sale.sale), str(sale.regular), spotlightString, imageString)
+    return "|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}|".format(sale.icon, sale.saleName, sale.wikiLink, str(sale.saleCost), str(sale.regularCost), mediaString)
 
 def makePost(saleArray, dateRange, naLink, euwLink = "/#"):
     rotationSchedule = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
@@ -153,7 +159,7 @@ def makePost(saleArray, dateRange, naLink, euwLink = "/#"):
     for sale in saleArray:
         sales = sales + saleOutput(sale) + "\n"
 
-    postTitle = "[Skin Sale] " + saleArray[0].name + ", " + saleArray[1].name + ", " + saleArray[2].name + " " + dateRange
+    postTitle = "[Skin Sale] " + saleArray[0].saleName + ", " + saleArray[1].saleName + ", " + saleArray[2].saleName + " " + dateRange
 
     postBody = (
         "| Icon | Skin/Champion | Sale Price | Regular Price | Media |\n" +
@@ -210,11 +216,11 @@ def parseData(content):
 
     for sale in saleArray:
         i = saleArray.index(sale)
-        sale.name, sale.regular, sale.sale = re.findall(saleRegex, content)[i]
-        sale.spotlight, sale.vidTitle = getSpotlight(sale.name, sale.isSkin)
+	sale.saleName, sale.regularCost, sale.saleCost = re.findall(saleRegex, content)[i]
+	sale.spotlight, sale.vidTitle = getSpotlight(sale.saleName, sale.isSkin)
 
         if not "-v" in sys.argv: # Terminal output
-            print "{0} ({1} RP), {2}".format(sale.name, sale.sale, sale.vidTitle or "No spotlight found")
+	    print "{0} ({1} RP), {2}".format(sale.saleName, sale.saleCost, sale.vidTitle or "No spotlight found")
 
         if sale.isSkin:
             sale.splash = re.findall(imageRegex, content)[(i*4)]
@@ -236,6 +242,5 @@ if __name__ == "__main__":
 
     if not testLink:
         submitPost(postTitle, postBody)
-        pass
 
     sys.exit(0)
