@@ -7,13 +7,25 @@ The bot is run via a cron job that is set to run between 7am and 8am on days whe
 
 There are a couple of files that this bot uses but aren't included in this Git repository: `lastrun.py` and `settings.py`. The former houses information about the last time the bot successfully posted, to keep track of what sale was most recent and also at what point in the skin sale prices rotation it is currently at.
 
-    # lastrun.py
-    lastSaleEnd = "2013-08-12"
-    rotation = 3
+```python
+lastSaleEnd = "2013-08-12"
+rotation = 3
+```
 
-`settings.py` contains information like the username and password of the bot, the user agent used, the subreddit the bot is posting to, and also what page the bot should search in order to check for a new sale.
+`settings.py` contains information like the username and password of the bot, the user agent used, the subreddit the bot is posting to, and also what page the bot should search in order to check for a new sale. In addition, this file stores information about two-part champion names, exception skins, and the FAQ content.
 
-    # settings.py
-    username = ""
-    password = ""
-    userAgent = ""
+```python
+username = "LeagueSalesBot"
+password = ""
+userAgent = ""
+subreddits = ["leagueoflegends", "LeagueSalesBot"]
+
+# Dictionary containing regexes for champions with two-part names
+multiNames = {}
+
+# Dictionary containing skins not in format "[skin name] [champion name]"
+exceptSkins = {}
+
+# Contains questions and answers for FAQ
+faqArray = []
+```
