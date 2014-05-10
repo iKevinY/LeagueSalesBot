@@ -1,8 +1,8 @@
 #! /usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os, sys, re, datetime, time
-import httplib2, praw
+import os, sys, re, datetime, time, textwrap
+import httplib2, praw, click
 import settings, lastrun
 
 """Create classes for sale types (skins and champions)"""
@@ -28,8 +28,9 @@ kSuccess = '\033[32m'
 kSpecial = '\033[36m'
 kReset = '\033[0m'
 
-def getContent(testLink = None):
+def getContent(testLink, refreshRate, delay):
     if testLink:
+
         naLink = testLink if "//na" in testLink else "/#"
         euwLink = testLink if "//euw" in testLink else "/#"
 
@@ -70,16 +71,20 @@ def getContent(testLink = None):
             "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd)
         ]
 
-        print "Last sale ended on " + kSpecial + lastSaleEnd.strftime("%B %-d") + kReset + ". Requesting sale pages."
-
         naLink, euwLink = None, None
 
-        while (not naLink) and (not euwLink):
+        if delay:
+            print "Sleeping for {0} hour{1}.".format(str(delay), 's' * (delay is not 1))
+            time.sleep(delay * 60 * 60)
+
+        print "Last sale ended on " + kSpecial + lastSaleEnd.strftime("%B %-d") + kReset + ". Requesting sale pages."
+
+        while not (naLink or euwLink):
             for i, link in enumerate(links):
                 try:
                     header, content = httplib2.Http().request(link)
                 except httplib2.ServerNotFoundError:
-                    sys.exit(kWarning + "Connection error. " + kReset + "Terminating script.")
+                    sys.exit(kWarning + "Connection error. " + kReset)
 
                 print link + "..." + ' ' * ("//na" in link),
 
@@ -90,9 +95,9 @@ def getContent(testLink = None):
                     naLink, euwLink = links[i % 2], links[i % 2 + 2]
                     break
             else:
-                if "-r" in sys.argv:
-                    print "Sleeping for 10 (c-X to force quit)..."
-                    time.sleep(10)
+                if refreshRate:
+                    print "Sleeping for {0} seconds (c-C to force quit)...".format(str(refreshRate))
+                    time.sleep(refreshRate)
                 else:
                     sys.exit(kWarning + "Terminating script." + kReset)
 
@@ -126,8 +131,7 @@ def saleOutput(sale):
     else:
         # Generate correct splash art URL; champion name in URL is of format "Anivia", "Jarvan", "Masteryi", "Khazix"
         sale.splashName = sale.saleName.replace('.', '').replace("'", ' ')
-        if sale.splashName == "Jarvan IV":
-            sale.splashName = "Jarvan"
+        sale.splashName = "Jarvan" if sale.splashName == "Jarvan IV" else sale.splashName
 
         try:
             sale.splashName = sale.splashName.rsplit(' ', 1)[0] + sale.splashName.rsplit(' ', 1)[1].lower()
@@ -140,32 +144,38 @@ def saleOutput(sale):
     sale.wikiLink = "http://leagueoflegends.wikia.com/wiki/" + sale.champName.replace(" ", "_")
     sale.icon = "[](/{0})".format(re.sub('\ |\.|\'', '', sale.champName.lower())) # Removes ' ', '.', and "'" characters from name
 
-    return "|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}|".format(sale.icon, sale.saleName, sale.wikiLink, str(sale.saleCost), str(sale.regularCost), mediaString)
+    return "|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}|".format(
+        sale.icon, sale.saleName, sale.wikiLink, str(sale.saleCost), str(sale.regularCost), mediaString)
 
 def makePost(saleArray, dateRange, naLink, euwLink = "/#"):
     """Formats sale data into Reddit post"""
     rotationSchedule = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
     nextRotation = rotationSchedule[lastrun.rotation % 4]
 
-    faq, sales = "", ""
+    postTitle = "[Skin Sale] " + ", ".join(sale.saleName for sale in saleArray if sale.isSkin) + " " + dateRange
 
-    for q in settings.faqArray:
-        faq = faq + "> **{0}**\n\n{1}\n\n".format(*q) # Uses * to unpack list into arguments
+    postArguments = [
+        ''.join(saleOutput(sale) + "\n" for sale in saleArray), # Sale rows
+        nextRotation[0], nextRotation[1], nextRotation[2], naLink, euwLink, # Miscellaneous variables
+        ''.join("> **{0}**\n\n{1}\n\n".format(*qa) for qa in settings.faqArray) # FAQ
+    ]
 
-    for sale in saleArray:
-        sales = sales + saleOutput(sale) + "\n"
+    postBody = textwrap.dedent('''
+        | Icon | Skin/Champion | Sale Price | Regular Price | Media |
+        |:----:|:-------------:|:----------:|:-------------:|:-----:|
+        {0}
+        Next skin sale: **{1} RP, {2} RP, {3} RP**.
 
-    postTitle = "[Skin Sale] " + ", ".join([sale.saleName for sale in saleArray if sale.isSkin]) + " " + dateRange
+        Link to sale pages ([NA]({4}), [EUW]({5})).
 
-    postBody = (
-        "| Icon | Skin/Champion | Sale Price | Regular Price | Media |\n" +
-        "|:----:|:-------------:|:----------:|:-------------:|:-----:|\n" +
-        sales + '\n'
-        "Next skin sale: **{0} RP, {1} RP, {2} RP**. ".format(*nextRotation) +
-        "Link to sale pages ([NA]({0}), [EUW]({1})).\n\n----\n\n".format(naLink, euwLink) +
-        "### Frequently Asked Questions\n\n" + faq + '----\n'
-        "^Coded ^by ^/u/Pewqazz. ^Feedback, ^suggestions, ^and ^bug ^reports ^are ^welcomed ^in ^/r/LeagueSalesBot."
-    )
+        ----
+
+        ### Frequently Asked Questions
+
+        {6}
+        ----
+        ^Coded ^by ^/u/Pewqazz. ^Feedback, ^suggestions, ^and ^bug ^reports ^are ^welcomed ^in ^/r/LeagueSalesBot.
+        ''').format(*postArguments)
 
     return postTitle, postBody
 
@@ -228,20 +238,26 @@ def parseSales(content):
 
     return saleArray
 
-if __name__ == "__main__":
-    testLink = next((sys.argv[i] for i, arg in enumerate(sys.argv) if "http://" in arg), None)
 
-    content, dateRange, naLink, euwLink = getContent(testLink)
+@click.command()
+@click.option('--testLink', '-l', default=None, help='link to test loading')
+@click.option('--refreshRate', '-r', default=0, help='delay between refreshing sale pages')
+@click.option('--delay', '-d', default=0, help='sleep period before running script (in hours)')
+@click.option('--verbose', '-v', 'verbose', is_flag=True, help='output entire post body')
+
+def main(testLink, refreshRate, delay, verbose):
+    content, dateRange, naLink, euwLink = getContent(testLink, refreshRate, delay)
     saleArray = parseSales(content)
     postTitle, postBody = makePost(saleArray, dateRange, naLink, euwLink)
 
-    if "-v" in sys.argv:
-        print postBody
-    else:
-        print kSpecial + postTitle + kReset
+    print postBody if verbose else kSpecial + postTitle + kReset
 
     if not testLink:
         submitPost(postTitle, postBody)
         updateLastRun()
 
     sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
