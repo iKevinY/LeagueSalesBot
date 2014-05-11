@@ -28,13 +28,13 @@ kSuccess = '\033[32m'
 kSpecial = '\033[36m'
 kReset = '\033[0m'
 
-def getContent(testLink, refreshRate, delay):
+def getContent(testLink, refresh, delay, verbose):
+    """Loads appropriate content based on most recent sale or supplied test link"""
     if testLink:
-
         naLink = testLink if "//na" in testLink else "/#"
         euwLink = testLink if "//euw" in testLink else "/#"
 
-        if not "-v" in sys.argv:
+        if not verbose:
             print testLink + "...",
 
         try:
@@ -46,9 +46,14 @@ def getContent(testLink, refreshRate, delay):
             print (kWarning + str(header.status) + kReset)
             sys.exit(kWarning + "Terminating script." + kReset)
         else:
-            if not "-v" in sys.argv:
+            if not verbose:
                 print kSuccess + "200" + kReset
-            start, end = re.findall(".*(\d{4})-(\d{4})", testLink)[0]
+
+            try:
+                start, end = re.findall(".*(\d{4})-(\d{4})", testLink)[0]
+            except IndexError:
+                sys.exit(kWarning + "Invalid sale page URL." + kReset)
+
             saleStart = datetime.datetime.strptime(start, "%m%d")
             saleEnd = datetime.datetime.strptime(end, "%m%d")
 
@@ -95,9 +100,9 @@ def getContent(testLink, refreshRate, delay):
                     naLink, euwLink = links[i % 2], links[i % 2 + 2]
                     break
             else:
-                if refreshRate:
-                    print "Sleeping for {0} seconds (c-C to force quit)...".format(str(refreshRate))
-                    time.sleep(refreshRate)
+                if refresh:
+                    print "Sleeping for 10 seconds (c-C to force quit)..."
+                    time.sleep(10)
                 else:
                     sys.exit(kWarning + "Terminating script." + kReset)
 
@@ -152,15 +157,13 @@ def makePost(saleArray, dateRange, naLink, euwLink = "/#"):
     rotationSchedule = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
     nextRotation = rotationSchedule[lastrun.rotation % 4]
 
-    postTitle = "[Skin Sale] " + ", ".join(sale.saleName for sale in saleArray if sale.isSkin) + " " + dateRange
-
     postArguments = [
         ''.join(saleOutput(sale) + "\n" for sale in saleArray), # Sale rows
         nextRotation[0], nextRotation[1], nextRotation[2], naLink, euwLink, # Miscellaneous variables
         ''.join("> **{0}**\n\n{1}\n\n".format(*qa) for qa in settings.faqArray) # FAQ
     ]
 
-    postBody = textwrap.dedent('''
+    return textwrap.dedent('''
         | Icon | Skin/Champion | Sale Price | Regular Price | Media |
         |:----:|:-------------:|:----------:|:-------------:|:-----:|
         {0}
@@ -176,8 +179,6 @@ def makePost(saleArray, dateRange, naLink, euwLink = "/#"):
         ----
         ^Coded ^by ^/u/Pewqazz. ^Feedback, ^suggestions, ^and ^bug ^reports ^are ^welcomed ^in ^/r/LeagueSalesBot.
         ''').format(*postArguments)
-
-    return postTitle, postBody
 
 
 def getSpotlight(name, isSkin):
@@ -199,6 +200,7 @@ def getSpotlight(name, isSkin):
     else:
         return "https://www.youtube.com" + slug, vidTitle
 
+
 def updateLastRun():
     """Make appropriate changes to lastrun.py if post succeeds"""
     saleEndText = (datetime.datetime.now() + datetime.timedelta(4)).strftime("%Y-%m-%d")
@@ -208,6 +210,7 @@ def updateLastRun():
         f.write("lastSaleEnd = \"{0}\"\nrotation = {1}\n".format(saleEndText, str((lastrun.rotation + 5) % 4)))
 
     print kSuccess + "Updated lastrun.py." + kReset
+
 
 def submitPost(postTitle, postBody):
     """Post to subreddits defined in settings.py"""
@@ -219,7 +222,7 @@ def submitPost(postTitle, postBody):
     print kSuccess + "Post successfully submitted to " + ", ".join(settings.subreddits) + "." + kReset
 
 
-def parseSales(content):
+def parseSales(content, verbose):
     """Finds sale data from sale page"""
     saleRegex = re.compile("<h4>(?:<a href.+?>)*\s*?(.+?)\s*?(?:<\/a>)*<\/h4>\s+?<strike.*?>(\d{3,4})<\/strike> (\d{3,4}) RP")
     imageRegex = re.compile("(http://riot-web-static\.s3\.amazonaws\.com/images/news/Skin_Sales/\S*?\.jpg)")
@@ -227,10 +230,6 @@ def parseSales(content):
 
     for i, sale in enumerate(saleArray):
         sale.saleName, sale.regularCost, sale.saleCost = re.findall(saleRegex, content)[i]
-        sale.spotlight, sale.vidTitle = getSpotlight(sale.saleName, sale.isSkin)
-
-        if not "-v" in sys.argv:
-            print "{0} ({1} RP), {2}".format(sale.saleName, sale.saleCost, sale.vidTitle or "No spotlight found")
 
         if sale.isSkin:
             sale.splashArt = re.findall(imageRegex, content)[i * 4]
@@ -240,24 +239,36 @@ def parseSales(content):
 
 
 @click.command()
-@click.option('--testLink', '-l', default=None, help='link to test loading')
-@click.option('--refreshRate', '-r', default=0, help='delay between refreshing sale pages')
-@click.option('--delay', '-d', default=0, help='sleep period before running script (in hours)')
-@click.option('--verbose', '-v', 'verbose', is_flag=True, help='output entire post body')
+@click.argument('testLink', required=False)
+@click.option('--delay', '-d', default=0, metavar='<hours>', help='Delay before running script.')
+@click.option('--refresh', '-r', 'refresh', is_flag=True, help='Automatically refresh sale pages.')
+@click.option('--verbose', '-v', 'verbose', is_flag=True, help='Output entire post body (for piping to pbcopy).')
 
-def main(testLink, refreshRate, delay, verbose):
-    content, dateRange, naLink, euwLink = getContent(testLink, refreshRate, delay)
-    saleArray = parseSales(content)
-    postTitle, postBody = makePost(saleArray, dateRange, naLink, euwLink)
+def main(testLink, refresh, delay, verbose):
+    content, dateRange, naLink, euwLink = getContent(testLink, refresh, delay, verbose)
+    saleArray = parseSales(content, verbose)
 
-    print postBody if verbose else kSpecial + postTitle + kReset
+    # Post title
+    postTitle = "[Skin Sale] " + ", ".join(sale.saleName for sale in saleArray if sale.isSkin) + " " + dateRange
+    if not verbose:
+        print kSpecial + postTitle + kReset
+
+    # Get spotlights
+    for sale in saleArray:
+        sale.spotlight, sale.vidTitle = getSpotlight(sale.saleName, sale.isSkin)
+        if not verbose:
+            print '\t'.join('{: <32}'.format(s) for s in [sale.saleName + " (" + sale.saleCost + " RP)", sale.vidTitle])
+
+    # Post body
+    postBody = makePost(saleArray, dateRange, naLink, euwLink)
+    if verbose:
+        print postBody
 
     if not testLink:
         submitPost(postTitle, postBody)
         updateLastRun()
 
     sys.exit(0)
-
 
 if __name__ == "__main__":
     main()
