@@ -1,18 +1,18 @@
 #! /usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os, sys, re, datetime, time, textwrap
+import os, sys, re, datetime, time, textwrap, math
 import httplib2, praw, click
 import settings, lastrun
 
 """Create classes for sale types (skins and champions)"""
 class Sale():
     saleName = ""
-    regularCost = 0
-    saleCost = 0
+    regularCost = "" # Sale cost and regular cost are actually strings
+    saleCost = ""
     champName = ""
     wikiLink = ""
-    icon = "[](/)"
+    icon = ""
 class Skin(Sale):
     isSkin = True
     skinName = ""
@@ -28,7 +28,15 @@ kSuccess = '\033[32m'
 kSpecial = '\033[36m'
 kReset = '\033[0m'
 
-def getContent(testLink, refresh, delay, verbose):
+def getRange(saleStart, saleEnd):
+    """Returns properly formatted date range for sale start and end"""
+    if saleStart.month == saleEnd.month:
+        return "{0}–{1}".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
+    else:
+        return"{0} – {1}".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
+
+
+def getContent(testLink, delay, refresh, verbose):
     """Loads appropriate content based on most recent sale or supplied test link"""
     if testLink:
         naLink = testLink if "//na" in testLink else "/#"
@@ -56,6 +64,7 @@ def getContent(testLink, refresh, delay, verbose):
 
             saleStart = datetime.datetime.strptime(start, "%m%d")
             saleEnd = datetime.datetime.strptime(end, "%m%d")
+            dateRange = getRange(saleStart, saleEnd)
 
     else:
         """
@@ -69,6 +78,8 @@ def getContent(testLink, refresh, delay, verbose):
         mdStart, mdEnd = saleStart.strftime("%m%d"), saleEnd.strftime("%m%d")
         dmStart, dmEnd = saleStart.strftime("%d%m"), saleEnd.strftime("%d%m")
 
+        dateRange = getRange(saleStart, saleEnd)
+
         links = [
             "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd),
             "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStart, dmEnd),
@@ -78,11 +89,12 @@ def getContent(testLink, refresh, delay, verbose):
 
         naLink, euwLink = None, None
 
+        print "Last sale ended on {0}. Requesting {1} sale.".format(
+            kSpecial + lastSaleEnd.strftime("%B %-d") + kReset, kSpecial + dateRange + kReset)
+
         if delay:
             print "Sleeping for {0} hour{1}.".format(str(delay), 's' * (delay is not 1))
             time.sleep(delay * 60 * 60)
-
-        print "Last sale ended on " + kSpecial + lastSaleEnd.strftime("%B %-d") + kReset + ". Requesting sale pages."
 
         while not (naLink or euwLink):
             for i, link in enumerate(links):
@@ -101,17 +113,12 @@ def getContent(testLink, refresh, delay, verbose):
                     break
             else:
                 if refresh:
-                    print "Sleeping for 10 seconds (c-C to force quit)..."
-                    time.sleep(10)
+                    print "Reloading every 15 seconds (c-C to force quit)..."
+                    time.sleep(15)
                 else:
                     sys.exit(kWarning + "Terminating script." + kReset)
 
         print kSuccess + "Post found!" + kReset + "\n"
-
-    if saleStart.month == saleEnd.month:
-        dateRange = "({0}–{1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
-    else:
-        dateRange = "({0} – {1})".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
 
     return content, dateRange, naLink, euwLink
 
@@ -194,11 +201,11 @@ def getSpotlight(name, isSkin):
     header, content = httplib2.Http().request(url)
 
     try:
-        slug, vidTitle = re.findall("<h3 class=\"yt-lockup-title\"><a .* href=\"(\S*)\">(.*)<\/a><\/h3>", content)[0]
+        slug, spotlightName = re.findall("<h3 class=\"yt-lockup-title\"><a .* href=\"(\S*)\">(.*)<\/a><\/h3>", content)[0]
     except IndexError:
         return "/#", None
     else:
-        return "https://www.youtube.com" + slug, vidTitle
+        return "https://www.youtube.com" + slug, spotlightName
 
 
 def updateLastRun():
@@ -238,31 +245,74 @@ def parseSales(content, verbose):
     return saleArray
 
 
+def manualPost():
+    """Manually enter sale data"""
+    saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
+
+    inputDate = str(datetime.datetime.now().year) + click.prompt('Enter sale start date [MMDD]', type=str)
+    saleStart = datetime.datetime.strptime(inputDate, "%Y%m%d")
+    saleEnd = saleStart + datetime.timedelta(3)
+
+    dateRange = getRange(saleStart, saleEnd)
+
+    mdStart, mdEnd = datetime.datetime.strftime(saleStart, "%m%d"), datetime.datetime.strftime(saleEnd, "%m%d")
+    dmStart, dmEnd = datetime.datetime.strftime(saleStart, "%d%m"), datetime.datetime.strftime(saleEnd, "%d%m")
+    naLink = "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd)
+    euwLink = "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStart, dmEnd)
+
+    for i, sale in enumerate(saleArray):
+        print ''
+        print "Skin #{}".format(i + 1) if sale.isSkin else "Champion #{}".format(i - 2)
+
+        sale.saleName = str(click.prompt('Enter sale name', type=str))
+        regular = click.prompt('Enter regular cost', type=int)
+        sale.salePrice = str(math.floor(regular))
+        sale.regularPrice = str(regular)
+
+        if sale.isSkin:
+            sale.splashArt = str(click.prompt('Splash art URL', type=str))
+            sale.inGameArt = str(click.prompt('In-game art URL', type=str))
+
+    return naLink, euwLink, dateRange, saleArray
+
+
 @click.command()
 @click.argument('testLink', required=False)
 @click.option('--delay', '-d', default=0, metavar='<hours>', help='Delay before running script.')
+@click.option('--manual', '-m', 'manual', is_flag=True, help='Manually create post.')
 @click.option('--refresh', '-r', 'refresh', is_flag=True, help='Automatically refresh sale pages.')
 @click.option('--verbose', '-v', 'verbose', is_flag=True, help='Output entire post body (for piping to pbcopy).')
 
-def main(testLink, refresh, delay, verbose):
-    content, dateRange, naLink, euwLink = getContent(testLink, refresh, delay, verbose)
-    saleArray = parseSales(content, verbose)
+def main(testLink, delay, manual, refresh, verbose):
+    """
+    Python script that generates Reddit post summarizing the biweekly League of
+    Legends champion and skin sales. Uses the httplib2 and PRAW libraries.
+    """
+
+    if manual:
+        naLink, euwLink, dateRange, saleArray = manualPost()
+    else:
+        content, dateRange, naLink, euwLink = getContent(testLink, delay, refresh, verbose)
+        saleArray = parseSales(content, verbose)
 
     # Post title
-    postTitle = "[Skin Sale] " + ", ".join(sale.saleName for sale in saleArray if sale.isSkin) + " " + dateRange
+    postTitle = "[Skin Sale] " + ", ".join(sale.saleName for sale in saleArray if sale.isSkin) + " (" + dateRange + ")"
     if not verbose:
         print kSpecial + postTitle + kReset
 
     # Get spotlights
     for sale in saleArray:
-        sale.spotlight, sale.vidTitle = getSpotlight(sale.saleName, sale.isSkin)
+        sale.spotlight, sale.spotlightName = getSpotlight(sale.saleName, sale.isSkin)
         if not verbose:
-            print '\t'.join('{: <32}'.format(s) for s in [sale.saleName + " (" + sale.saleCost + " RP)", sale.vidTitle])
+            print '\t'.join('{: <24}'.format(s) for s in [sale.saleName, sale.saleCost + " RP", sale.spotlightName])
 
     # Post body
     postBody = makePost(saleArray, dateRange, naLink, euwLink)
     if verbose:
         print postBody
+
+    if manual and (not click.confirm('Do you want to continue?')):
+        sys.exit(kWarning + "Did not post." + kReset)
 
     if not testLink:
         submitPost(postTitle, postBody)
