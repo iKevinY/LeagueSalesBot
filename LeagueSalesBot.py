@@ -21,23 +21,19 @@ class Champ(Sale):
     isSkin = False
     infoPage = ""
 
-
 """Define functions for printing ANSI-coloured terminal messages"""
-sReset = '\033[0m'
-sSpecial = lambda s: '\033[36m' + s + sReset
-sSuccess = lambda s: '\033[32m' + s + sReset
-sWarning = lambda s: '\033[31m' + s + sReset
+sSpecial = lambda s: '\033[36m' + s + '\033[0m'
+sSuccess = lambda s: '\033[32m' + s + '\033[0m'
+sWarning = lambda s: '\033[31m' + s + '\033[0m'
 
-
-def formatRange(saleStart, saleEnd):
+def format_range(saleStart, saleEnd):
     """Returns properly formatted date range for sale start and end"""
     if saleStart.month == saleEnd.month:
         return "{0}–{1}".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
     else:
         return"{0} – {1}".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
 
-
-def getContent(testLink, delay, refresh, verbose):
+def get_content(testLink, delay, refresh, verbose):
     """Loads appropriate content based on most recent sale or supplied test link"""
     if testLink:
         naLink = testLink if "//na" in testLink else "/#"
@@ -65,7 +61,7 @@ def getContent(testLink, delay, refresh, verbose):
 
             saleStart = datetime.datetime.strptime(start, "%m%d")
             saleEnd = datetime.datetime.strptime(end, "%m%d")
-            dateRange = formatRange(saleStart, saleEnd)
+            dateRange = format_range(saleStart, saleEnd)
 
     else:
         """
@@ -77,7 +73,7 @@ def getContent(testLink, delay, refresh, verbose):
         saleStart = lastSaleEnd + datetime.timedelta((lastrun.rotation + 1) % 2)
         saleEnd = saleStart + datetime.timedelta(3) # Four-day-long sales
 
-        dateRange = formatRange(saleStart, saleEnd)
+        dateRange = format_range(saleStart, saleEnd)
 
         monthDate = saleStart.strftime("%m%d"), saleEnd.strftime("%m%d")
         dateMonth = saleStart.strftime("%d%m"), saleEnd.strftime("%d%m")
@@ -135,20 +131,18 @@ def getContent(testLink, delay, refresh, verbose):
 
     return naLink, euwLink, dateRange, saleArray
 
-def saleOutput(sale):
+def sale_output(sale):
     """Generates row of sale table for sale item"""
     if sale.isSkin:
-        # Champions with multi-part names
-        for key, value in settings.multiNames.iteritems():
+        # Champions with two-part names
+        for key, value in settings.twoParts.iteritems():
             if re.match(key, sale.saleName):
                 sale.champName = value
                 break
         else:
-            # Try all exception skins skins
-            for key, v in settings.exceptSkins.iteritems():
-                if sale.saleName == key:
-                    sale.champName = value
-                    break
+            # Try all exception skins
+            if sale.saleName in settings.exceptSkins:
+                sale.champName = settings.exceptSkins[sale.saleName]
             else:
                 sale.champName = sale.saleName.rsplit(' ', 1)[1] # Champion name is final word of skin name
 
@@ -166,14 +160,13 @@ def saleOutput(sale):
     return "|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}|".format(
         sale.icon, sale.saleName, sale.wikiLink, str(sale.saleCost), str(sale.regularCost), mediaString)
 
-
-def makePost(saleArray, dateRange, naLink, euwLink):
+def make_post(saleArray, dateRange, naLink, euwLink):
     """Formats sale data into Reddit post"""
     rotationSchedule = ((975, 750, 520), (1350, 975, 520), (975, 750, 520), (975, 975, 520))
     nextRotation = rotationSchedule[lastrun.rotation % 4]
 
     postArguments = (
-        ''.join(saleOutput(sale) + "\n" for sale in saleArray), # Sale rows
+        ''.join(sale_output(sale) + "\n" for sale in saleArray), # Sale rows
         nextRotation[0], nextRotation[1], nextRotation[2], naLink, euwLink, # Miscellaneous variables
         ''.join("> **{0}**\n\n{1}\n\n".format(*qa) for qa in settings.faqArray) # FAQ
     )
@@ -193,15 +186,14 @@ def makePost(saleArray, dateRange, naLink, euwLink):
         ^Coded ^by ^/u/Pewqazz. ^Feedback, ^suggestions, ^and ^bug ^reports ^are ^welcomed ^in ^/r/LeagueSalesBot.
         ''').format(*postArguments)
 
-
-def getSpotlight(name, isSkin):
+def get_spotlight(name, isSkin):
     """Finds appropriate champion or skin spotlight video for sale"""
     if isSkin:
         channel = "SkinSpotlights"
-        suffix = "+skin+spotlight"
+        suffix = "+Skin+Spotlight"
     else:
         channel = "RiotGamesInc"
-        suffix = "+champion+spotlight"
+        suffix = "+Champion+Spotlight"
 
     try:
         header, content = httplib2.Http().request(
@@ -216,8 +208,7 @@ def getSpotlight(name, isSkin):
     else:
         return "https://www.youtube.com" + slug, spotlightName
 
-
-def submitPost(postTitle, postBody):
+def submit_post(postTitle, postBody):
     """Post to subreddits defined in settings.py and updates lastrun.py"""
     r = praw.Reddit(user_agent=settings.userAgent)
     r.login(settings.username, settings.password)
@@ -234,8 +225,7 @@ def submitPost(postTitle, postBody):
 
     print sSuccess("Updated lastrun.py.")
 
-
-def manualPost():
+def manual_post():
     """Manually enter sale data from the CLI"""
     saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
 
@@ -243,12 +233,12 @@ def manualPost():
     saleStart = datetime.datetime.strptime(inputDate, "%Y%m%d")
     saleEnd = saleStart + datetime.timedelta(3)
 
-    dateRange = formatRange(saleStart, saleEnd)
+    dateRange = format_range(saleStart, saleEnd)
 
-    mdStart, mdEnd = datetime.datetime.strftime(saleStart, "%m%d"), datetime.datetime.strftime(saleEnd, "%m%d")
-    dmStart, dmEnd = datetime.datetime.strftime(saleStart, "%d%m"), datetime.datetime.strftime(saleEnd, "%d%m")
-    naLink = "http://na.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(mdStart, mdEnd)
-    euwLink = "http://euw.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{0}-{1}".format(dmStart, dmEnd)
+    monthDate = datetime.datetime.strftime(saleStart, "%m%d"), datetime.datetime.strftime(saleEnd, "%m%d")
+    dateMonth = datetime.datetime.strftime(saleStart, "%d%m"), datetime.datetime.strftime(saleEnd, "%d%m")
+    naLink, euwLink = ("http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}".format(
+        l[0], *l[1]) for l in (("na", monthDate), ("euw", dateMonth)))
 
     for i, sale in enumerate(saleArray):
         print "\nSkin #{}".format(i + 1) if sale.isSkin else "\nChampion #{}".format(i - 2)
@@ -258,15 +248,14 @@ def manualPost():
         sale.salePrice = str(math.floor(int(sale.regularPrice)))
 
         if sale.isSkin:
-            sale.splashArt = str(click.prompt('Splash art URL', type=str))
-            sale.inGameArt = str(click.prompt('In-game art URL', type=str))
+            sale.splashArt = str(click.prompt('Splash art URL', type=str, default="/#"))
+            sale.inGameArt = str(click.prompt('In-game art URL', type=str, default="/#"))
 
     return naLink, euwLink, dateRange, saleArray
 
-
 @click.command()
 @click.argument('testLink', required=False)
-@click.option('--delay', '-d', 'delay', default=0, metavar='<hours>', help='Delay before running script.')
+@click.option('--delay', '-d', 'delay', default=0, help='Delay before running script.', metavar='<hours>')
 @click.option('--manual', '-m', 'manual', is_flag=True, help='Manually create post.')
 @click.option('--refresh', '-r', 'refresh', is_flag=True, help='Automatically refresh sale pages.')
 @click.option('--verbose', '-v', 'verbose', is_flag=True, help='Output entire post body (for piping to pbcopy).')
@@ -277,7 +266,7 @@ def main(testLink, delay, manual, refresh, verbose):
     Legends champion and skin sales. Uses the httplib2 and PRAW libraries.
     """
 
-    naLink, euwLink, dateRange, saleArray = manualPost() if manual else getContent(testLink, delay, refresh, verbose)
+    naLink, euwLink, dateRange, saleArray = manual_post() if manual else get_content(testLink, delay, refresh, verbose)
 
     # Generate post title
     postTitle = "[Skin Sale] " + ", ".join(sale.saleName for sale in saleArray if sale.isSkin) + " (" + dateRange + ")"
@@ -287,11 +276,11 @@ def main(testLink, delay, manual, refresh, verbose):
 
     # Get spotlights and print to terminal
     for sale in saleArray:
-        sale.spotlight, sale.spotlightName = getSpotlight(sale.saleName, sale.isSkin)
+        sale.spotlight, sale.spotlightName = get_spotlight(sale.saleName, sale.isSkin)
         if not verbose:
             print '{: <30}'.format(sale.saleName) + sale.saleCost + " RP\t" + sale.spotlightName
 
-    postBody = makePost(saleArray, dateRange, naLink, euwLink)
+    postBody = make_post(saleArray, dateRange, naLink, euwLink)
 
     if verbose:
         print postBody
@@ -300,7 +289,7 @@ def main(testLink, delay, manual, refresh, verbose):
         if manual and not click.confirm('Post to Reddit?'):
             sys.exit(sWarning("Did not post."))
         else:
-            submitPost(postTitle, postBody)
+            submit_post(postTitle, postBody)
 
     sys.exit(0)
 
