@@ -7,12 +7,12 @@ import settings, lastrun
 
 """Create classes for sale types (skins and champions)"""
 class Sale():
-    saleName = ""
-    regularCost = ""
-    saleCost = ""
-    champName = ""
-    wikiLink = ""
     icon = ""
+    saleName = ""
+    wikiLink = ""
+    saleCost = ""
+    regularCost = ""
+    champName = ""
 class Skin(Sale):
     isSkin = True
     splashArt = ""
@@ -52,7 +52,7 @@ def get_content(testLink, delay, refresh, verbose):
             sys.exit(sWarning("Terminating script."))
         else:
             if not verbose:
-                print sSuccess("200")
+                print sSuccess(str(header.status))
 
             try:
                 start, end = re.findall(".*(\d{4})-(\d{4})", testLink)[0]
@@ -102,7 +102,7 @@ def get_content(testLink, delay, refresh, verbose):
                 if header.status != 200:
                     print sWarning(str(header.status))
                 else:
-                    print sSuccess("200")
+                    print sSuccess(str(header.status))
                     naLink, euwLink = links[i % 2], links[(i % 2) + 2]
                     break
             else:
@@ -121,7 +121,10 @@ def get_content(testLink, delay, refresh, verbose):
     saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
 
     for i, sale in enumerate(saleArray):
-        sale.saleName, sale.regularCost, sale.saleCost = re.findall(saleRegex, content)[i]
+        try:
+            sale.saleName, sale.regularCost, sale.saleCost = re.findall(saleRegex, content)[i]
+        except IndexError:
+            sys.exit(sWarning("Sale data could not be parsed (possible change in formatting)."))
 
         if sale.isSkin:
             sale.splashArt = re.findall(skinRegex, content)[i * 4]
@@ -154,11 +157,11 @@ def sale_output(sale):
 
     sale.wikiLink = "http://leagueoflegends.wikia.com/wiki/" + sale.champName.replace(" ", "_")
 
-    # Remove spaces, periods, and apostrophes from name to generate champion icon
+    # Remove spaces, periods, and apostrophes from champion name to generate icon
     sale.icon = "[](/{0})".format(re.sub('\ |\.|\'', '', sale.champName.lower()))
 
     return "|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}|".format(
-        sale.icon, sale.saleName, sale.wikiLink, str(sale.saleCost), str(sale.regularCost), mediaString)
+        sale.icon, sale.saleName, sale.wikiLink, sale.saleCost, sale.regularCost, mediaString)
 
 def make_post(saleArray, dateRange, naLink, euwLink):
     """Formats sale data into Reddit post"""
@@ -172,8 +175,8 @@ def make_post(saleArray, dateRange, naLink, euwLink):
     )
 
     return textwrap.dedent('''
-        | Icon | Skin/Champion | Sale Price | Regular Price | Media |
-        |:----:|:-------------:|:----------:|:-------------:|:-----:|
+        | Icon | Skin/Champion | Sale Price | Regular Price | Resources |
+        |:----:|:-------------:|:----------:|:-------------:|:---------:|
         {0}
         Next skin sale: **{1} RP, {2} RP, {3} RP**. Link to sale pages ([NA]({4}), [EUW]({5})).
 
@@ -204,7 +207,7 @@ def get_spotlight(name, isSkin):
     try:
         slug, spotlightName = re.findall("<h3 class=\"yt-lockup-title\"><a .* href=\"(\S*)\">(.*)<\/a><\/h3>", content)[0]
     except IndexError:
-        return "/#", None
+        return "/#", "No spotlight found."
     else:
         return "https://www.youtube.com" + slug, spotlightName
 
@@ -250,6 +253,8 @@ def manual_post():
         if sale.isSkin:
             sale.splashArt = str(click.prompt('Splash art URL', type=str, default="/#"))
             sale.inGameArt = str(click.prompt('In-game art URL', type=str, default="/#"))
+        else:
+            sale.infoPage = str(click.prompt('Info page URL', type=str, default="/#"))
 
     return naLink, euwLink, dateRange, saleArray
 
@@ -268,7 +273,6 @@ def main(testLink, delay, manual, refresh, verbose):
 
     naLink, euwLink, dateRange, saleArray = manual_post() if manual else get_content(testLink, delay, refresh, verbose)
 
-    # Generate post title
     postTitle = "[Skin Sale] " + ", ".join(sale.saleName for sale in saleArray if sale.isSkin) + " (" + dateRange + ")"
 
     if not verbose:

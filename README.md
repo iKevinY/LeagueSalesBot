@@ -21,7 +21,7 @@ userAgent = ""
 subreddits = ["leagueoflegends", "LeagueSalesBot"]
 
 # Dictionary containing regexes for champions with two-part names
-twoParts = {".*? Miss Fortune": "Miss Fortune", ".*? Mundo": Dr. Mundo"}
+twoParts = {".*? Miss Fortune": "Miss Fortune", ".*? Mundo": "Dr. Mundo"}
 
 # Dictionary containing skins not in format "[skin name] [champion name]"
 exceptSkins = {"AstroNautilus": "Nautilus"}
