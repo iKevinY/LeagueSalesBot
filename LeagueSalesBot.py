@@ -8,7 +8,7 @@ import settings, lastrun
 """Create classes for sale types (skins and champions)"""
 class Sale():
     saleName = ""
-    regularCost = "" # Sale cost and regular cost are actually strings
+    regularCost = ""
     saleCost = ""
     champName = ""
     wikiLink = ""
@@ -21,11 +21,13 @@ class Champ(Sale):
     isSkin = False
     infoPage = ""
 
-"""Define variables for ANSI-coloured terminal messages"""
-kWarning = '\033[31m'
-kSuccess = '\033[32m'
-kSpecial = '\033[36m'
-kReset = '\033[0m'
+
+"""Define functions for printing ANSI-coloured terminal messages"""
+sReset = '\033[0m'
+sSpecial = lambda s: '\033[36m' + s + sReset
+sSuccess = lambda s: '\033[32m' + s + sReset
+sWarning = lambda s: '\033[31m' + s + sReset
+
 
 def formatRange(saleStart, saleEnd):
     """Returns properly formatted date range for sale start and end"""
@@ -47,19 +49,19 @@ def getContent(testLink, delay, refresh, verbose):
         try:
             header, content = httplib2.Http().request(testLink)
         except httplib2.ServerNotFoundError:
-            sys.exit(kWarning + "Connection error. " + kReset)
+            sys.exit(sWarning("Connection error."))
 
         if header.status != 200:
-            print (kWarning + str(header.status) + kReset)
-            sys.exit(kWarning + "Terminating script." + kReset)
+            print (sWarning(str(header.status)))
+            sys.exit(sWarning("Terminating script."))
         else:
             if not verbose:
-                print kSuccess + "200" + kReset
+                print sSuccess("200")
 
             try:
                 start, end = re.findall(".*(\d{4})-(\d{4})", testLink)[0]
             except IndexError:
-                sys.exit(kWarning + "Invalid sale page URL." + kReset)
+                sys.exit(sWarning("Invalid sale page URL."))
 
             saleStart = datetime.datetime.strptime(start, "%m%d")
             saleEnd = datetime.datetime.strptime(end, "%m%d")
@@ -80,13 +82,13 @@ def getContent(testLink, delay, refresh, verbose):
         monthDate = saleStart.strftime("%m%d"), saleEnd.strftime("%m%d")
         dateMonth = saleStart.strftime("%d%m"), saleEnd.strftime("%d%m")
 
-        links = ["http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}".format(
-            l[0], *l[1]) for l in (("na", monthDate), ("na", dateMonth), ("euw", dateMonth), ("euw", monthDate))]
+        links = ("http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}".format(
+            l[0], *l[1]) for l in (("na", monthDate), ("na", dateMonth), ("euw", dateMonth), ("euw", monthDate)))
 
         naLink, euwLink = None, None
 
         print "Last sale ended on {0}. Requesting {1} sale.".format(
-            kSpecial + lastSaleEnd.strftime("%B %-d") + kReset, kSpecial + dateRange + kReset)
+            sSpecial(lastSaleEnd.strftime("%B %-d")), sSpecial(dateRange))
 
         if delay:
             print "Sleeping for {0} hour{1}.".format(str(delay), 's' * (delay is not 1))
@@ -97,14 +99,14 @@ def getContent(testLink, delay, refresh, verbose):
                 try:
                     header, content = httplib2.Http().request(link)
                 except httplib2.ServerNotFoundError:
-                    sys.exit(kWarning + "Connection error." + kReset)
+                    sys.exit(sWarning("Connection error."))
 
                 print link + "..." + ' ' * ("//na" in link),
 
                 if header.status != 200:
-                    print kWarning + str(header.status) + kReset
+                    print sWarning(str(header.status))
                 else:
-                    print kSuccess + "200" + kReset
+                    print sSuccess("200")
                     naLink, euwLink = links[i % 2], links[(i % 2) + 2]
                     break
             else:
@@ -112,9 +114,9 @@ def getContent(testLink, delay, refresh, verbose):
                     print "Reloading every 15 seconds (c-C to force quit)..."
                     time.sleep(15)
                 else:
-                    sys.exit(kWarning + "Terminating script." + kReset)
+                    sys.exit(sWarning("Terminating script."))
 
-        print kSuccess + "Post found!" + kReset + "\n"
+        print sSuccess("Post found!") + '\n'
 
     saleRegex = re.compile("<h4>(?:<a href.+?>)*\s*?(.+?)\s*?(?:<\/a>)*<\/h4>\s+?<strike.*?>(\d{3,4})<\/strike> (\d{3,4}) RP")
     skinRegex = re.compile("(http://riot-web-static\.s3\.amazonaws\.com/images/news/Skin_Sales/\S+?\.jpg)")
@@ -167,26 +169,24 @@ def saleOutput(sale):
 
 def makePost(saleArray, dateRange, naLink, euwLink):
     """Formats sale data into Reddit post"""
-    rotationSchedule = [[975, 750, 520], [1350, 975, 520], [975, 750, 520], [975, 975, 520]]
+    rotationSchedule = ((975, 750, 520), (1350, 975, 520), (975, 750, 520), (975, 975, 520))
     nextRotation = rotationSchedule[lastrun.rotation % 4]
 
-    postArguments = [
+    postArguments = (
         ''.join(saleOutput(sale) + "\n" for sale in saleArray), # Sale rows
         nextRotation[0], nextRotation[1], nextRotation[2], naLink, euwLink, # Miscellaneous variables
         ''.join("> **{0}**\n\n{1}\n\n".format(*qa) for qa in settings.faqArray) # FAQ
-    ]
+    )
 
     return textwrap.dedent('''
         | Icon | Skin/Champion | Sale Price | Regular Price | Media |
         |:----:|:-------------:|:----------:|:-------------:|:-----:|
         {0}
-        Next skin sale: **{1} RP, {2} RP, {3} RP**.
-
-        Link to sale pages ([NA]({4}), [EUW]({5})).
+        Next skin sale: **{1} RP, {2} RP, {3} RP**. Link to sale pages ([NA]({4}), [EUW]({5})).
 
         ----
 
-        ### Frequently Asked Questions
+        ## Frequently Asked Questions
 
         {6}
         ----
@@ -207,7 +207,7 @@ def getSpotlight(name, isSkin):
         header, content = httplib2.Http().request(
             "https://www.youtube.com/user/" + channel + "/search?query=" + name.replace(" ", "+") + suffix)
     except httplib2.ServerNotFoundError:
-        sys.exit(kWarning + "Connection error. " + kReset)
+        sys.exit(sWarning("Connection error."))
 
     try:
         slug, spotlightName = re.findall("<h3 class=\"yt-lockup-title\"><a .* href=\"(\S*)\">(.*)<\/a><\/h3>", content)[0]
@@ -224,7 +224,7 @@ def submitPost(postTitle, postBody):
     for subreddit in settings.subreddits:
         r.submit(subreddit, postTitle, text=postBody)
 
-    print kSuccess + "Post successfully submitted to " + ", ".join(settings.subreddits) + "." + kReset
+    print sSuccess("Post successfully submitted to " + ", ".join(settings.subreddits) + ".")
 
     saleEndText = (datetime.datetime.now() + datetime.timedelta(4)).strftime("%Y-%m-%d")
     directory = os.path.dirname(os.path.realpath(__file__))
@@ -232,7 +232,7 @@ def submitPost(postTitle, postBody):
     with open(path, 'r+') as f:
         f.write("lastSaleEnd = \"{0}\"\nrotation = {1}\n".format(saleEndText, str((lastrun.rotation + 5) % 4)))
 
-    print kSuccess + "Updated lastrun.py." + kReset
+    print sSuccess("Updated lastrun.py.")
 
 
 def manualPost():
@@ -283,7 +283,7 @@ def main(testLink, delay, manual, refresh, verbose):
     postTitle = "[Skin Sale] " + ", ".join(sale.saleName for sale in saleArray if sale.isSkin) + " (" + dateRange + ")"
 
     if not verbose:
-        print kSpecial + postTitle + kReset
+        print sSpecial(postTitle)
 
     # Get spotlights and print to terminal
     for sale in saleArray:
@@ -298,7 +298,7 @@ def main(testLink, delay, manual, refresh, verbose):
 
     if not testLink:
         if manual and not click.confirm('Post to Reddit?'):
-            sys.exit(kWarning + "Did not post." + kReset)
+            sys.exit(sWarning("Did not post."))
         else:
             submitPost(postTitle, postBody)
 
