@@ -1,7 +1,7 @@
 #! /usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os, sys, re, datetime, time, textwrap, math
+import os, sys, re, datetime, time, math
 import httplib2, praw, click
 import settings, lastrun
 
@@ -26,12 +26,14 @@ sSpecial = lambda s: '\033[36m' + s + '\033[0m'
 sSuccess = lambda s: '\033[32m' + s + '\033[0m'
 sWarning = lambda s: '\033[31m' + s + '\033[0m'
 
+
 def format_range(saleStart, saleEnd):
     """Returns properly formatted date range for sale start and end"""
     if saleStart.month == saleEnd.month:
         return "{0}–{1}".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%-d"))
     else:
         return"{0} – {1}".format(saleStart.strftime("%B %-d"), saleEnd.strftime("%B %-d"))
+
 
 def get_content(testLink, delay, refresh, verbose):
     """Loads appropriate content based on most recent sale or supplied test link"""
@@ -71,7 +73,7 @@ def get_content(testLink, delay, refresh, verbose):
         """
         lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, "%Y-%m-%d")
         saleStart = lastSaleEnd + datetime.timedelta((lastrun.rotation + 1) % 2)
-        saleEnd = saleStart + datetime.timedelta(3) # Four-day-long sales
+        saleEnd = saleStart + datetime.timedelta(3) # Four-day sales
 
         dateRange = format_range(saleStart, saleEnd)
 
@@ -134,13 +136,14 @@ def get_content(testLink, delay, refresh, verbose):
 
     return naLink, euwLink, dateRange, saleArray
 
+
 def sale_output(sale):
     """Generates row of sale table for sale item"""
     if sale.isSkin:
         # Champions with two-part names
-        for key, value in settings.twoParts.iteritems():
-            if re.match(key, sale.saleName):
-                sale.champName = value
+        for regex, champion in settings.twoParts.iteritems():
+            if re.match(regex, sale.saleName):
+                sale.champName = champion
                 break
         else:
             # Try all exception skins
@@ -163,31 +166,26 @@ def sale_output(sale):
     return "|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}|".format(
         sale.icon, sale.saleName, sale.wikiLink, sale.saleCost, sale.regularCost, mediaString)
 
+
 def make_post(saleArray, dateRange, naLink, euwLink):
     """Formats sale data into Reddit post"""
-    rotationSchedule = ((975, 750, 520), (1350, 975, 520), (975, 750, 520), (975, 975, 520))
-    nextRotation = rotationSchedule[lastrun.rotation % 4]
 
-    postArguments = (
-        ''.join(sale_output(sale) + "\n" for sale in saleArray), # Sale rows
-        nextRotation[0], nextRotation[1], nextRotation[2], naLink, euwLink, # Miscellaneous variables
-        ''.join("> **{0}**\n\n{1}\n\n".format(*qa) for qa in settings.faqArray) # FAQ
+    # Determine prices of next sale skins given the previous sale (stored in lastrun.py)
+    nextRotation = ((975, 750, 520), (1350, 975, 520), (975, 750, 520), (975, 975, 520))[lastrun.rotation % 4]
+
+    return (
+        "| Icon | Skin/Champion | Sale Price | Regular Price | Resources |\n" +
+        "|:----:|:-------------:|:----------:|:-------------:|:---------:|\n" +
+        ''.join(sale_output(sale) + "\n" for sale in saleArray) +
+        "Next skin sale: **{0} RP, {1} RP, {2} RP**. ".format(*nextRotation) +
+        "Link to sale pages ([NA]({0}), [EUW]({1})).".format(naLink, euwLink) +
+        "\n\n----\n\n" +
+        "## Frequently Asked Questions\n\n" +
+        '\n\n'.join("> **{0}**\n\n{1}".format(*qa) for qa in settings.faqArray) +
+        "\n\n----\n" +
+        "^Coded ^by ^/u/Pewqazz. ^Feedback, ^suggestions, ^and ^bug ^reports ^are ^welcomed ^in ^/r/LeagueSalesBot."
     )
 
-    return textwrap.dedent('''
-        | Icon | Skin/Champion | Sale Price | Regular Price | Resources |
-        |:----:|:-------------:|:----------:|:-------------:|:---------:|
-        {0}
-        Next skin sale: **{1} RP, {2} RP, {3} RP**. Link to sale pages ([NA]({4}), [EUW]({5})).
-
-        ----
-
-        ## Frequently Asked Questions
-
-        {6}
-        ----
-        ^Coded ^by ^/u/Pewqazz. ^Feedback, ^suggestions, ^and ^bug ^reports ^are ^welcomed ^in ^/r/LeagueSalesBot.
-        ''').format(*postArguments)
 
 def get_spotlight(name, isSkin):
     """Finds appropriate champion or skin spotlight video for sale"""
@@ -211,6 +209,7 @@ def get_spotlight(name, isSkin):
     else:
         return "https://www.youtube.com" + slug, spotlightName
 
+
 def submit_post(postTitle, postBody):
     """Post to subreddits defined in settings.py and updates lastrun.py"""
     r = praw.Reddit(user_agent=settings.userAgent)
@@ -227,6 +226,7 @@ def submit_post(postTitle, postBody):
         f.write("lastSaleEnd = \"{0}\"\nrotation = {1}\n".format(saleEndText, str((lastrun.rotation + 5) % 4)))
 
     print sSuccess("Updated lastrun.py.")
+
 
 def manual_post():
     """Manually enter sale data from the CLI"""
@@ -257,6 +257,7 @@ def manual_post():
             sale.infoPage = str(click.prompt('Info page URL', type=str, default="/#"))
 
     return naLink, euwLink, dateRange, saleArray
+
 
 @click.command()
 @click.argument('testLink', required=False)
@@ -296,6 +297,7 @@ def main(testLink, delay, manual, refresh, verbose):
             submit_post(postTitle, postBody)
 
     sys.exit(0)
+
 
 if __name__ == "__main__":
     main()
