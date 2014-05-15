@@ -1,9 +1,19 @@
 #! /usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os, sys, re, datetime, time, math
-import httplib2, praw, click
-import settings, lastrun
+import os
+import sys
+import re
+import datetime
+import time
+import math
+
+import httplib2
+import praw
+import click
+
+import settings
+import lastrun
 
 """Create classes for sale types (skins and champions)"""
 class Sale():
@@ -13,18 +23,21 @@ class Sale():
     saleCost = ""
     regularCost = ""
     champName = ""
+
 class Skin(Sale):
     isSkin = True
     splashArt = ""
     inGameArt = ""
+
 class Champ(Sale):
     isSkin = False
     infoPage = ""
 
+
 """Define functions for printing ANSI-coloured terminal messages"""
-sSpecial = lambda s: '\033[36m' + s + '\033[0m'
-sSuccess = lambda s: '\033[32m' + s + '\033[0m'
-sWarning = lambda s: '\033[31m' + s + '\033[0m'
+def sSpecial(s): return '\033[36m' + s + '\033[0m'
+def sSuccess(s): return '\033[32m' + s + '\033[0m'
+def sWarning(s): return '\033[31m' + s + '\033[0m'
 
 
 def format_range(saleStart, saleEnd):
@@ -80,8 +93,8 @@ def get_content(testLink, delay, refresh, verbose):
         monthDate = saleStart.strftime("%m%d"), saleEnd.strftime("%m%d")
         dateMonth = saleStart.strftime("%d%m"), saleEnd.strftime("%d%m")
 
-        links = ("http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}".format(
-            l[0], *l[1]) for l in (("na", monthDate), ("na", dateMonth), ("euw", dateMonth), ("euw", monthDate)))
+        links = ["http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}".format(
+            l[0], *l[1]) for l in (("na", monthDate), ("na", dateMonth), ("euw", dateMonth), ("euw", monthDate))]
 
         naLink, euwLink = None, None
 
@@ -118,7 +131,7 @@ def get_content(testLink, delay, refresh, verbose):
 
     saleRegex = re.compile("<h4>(?:<a href.+?>)*\s*?(.+?)\s*?(?:<\/a>)*<\/h4>\s+?<strike.*?>(\d{3,4})<\/strike> (\d{3,4}) RP")
     skinRegex = re.compile("(http://riot-web-static\.s3\.amazonaws\.com/images/news/Skin_Sales/\S+?\.jpg)")
-    infoRegex = re.compile("\"(http://gameinfo.na.leagueoflegends.com/en/game-info/champions/\S+?)\"")
+    infoRegex = re.compile("\"(http://gameinfo.(?:na|euw).leagueoflegends.com/en/game-info/champions/\S+?)\"")
 
     saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
 
@@ -132,7 +145,11 @@ def get_content(testLink, delay, refresh, verbose):
             sale.splashArt = re.findall(skinRegex, content)[i * 4]
             sale.inGameArt = re.findall(skinRegex, content)[(i * 4) + 2]
         else:
-            sale.infoPage = re.findall(infoRegex, content)[(i - 3) * 2]
+            sale.infoPage = re.findall(infoRegex, content)[(i - 3) * 2].replace(".euw.", ".na.")
+
+    # Swap first and second skin sales if second skin sale is a 1350 RP skin
+    if int(saleArray[1].regularCost) > int(saleArray[0].regularCost):
+        saleArray[0], saleArray[1] = saleArray[1], saleArray[0]
 
     return naLink, euwLink, dateRange, saleArray
 
@@ -150,7 +167,7 @@ def sale_output(sale):
             if sale.saleName in settings.exceptSkins:
                 sale.champName = settings.exceptSkins[sale.saleName]
             else:
-                sale.champName = sale.saleName.rsplit(' ', 1)[1] # Champion name is final word of skin name
+                sale.champName = sale.saleName.split()[-1] # Champion name is final word of skin name
 
         mediaString = "**[Skin Spotlight]({0})**, [Splash Art]({1}), [In-Game]({2})".format(
             sale.spotlight, sale.splashArt, sale.inGameArt)
@@ -246,15 +263,15 @@ def manual_post():
     for i, sale in enumerate(saleArray):
         print "\nSkin #{}".format(i + 1) if sale.isSkin else "\nChampion #{}".format(i - 2)
 
-        sale.saleName = str(click.prompt('Enter sale name', type=str))
-        sale.regularPrice = click.prompt('Enter regular cost', type=str)
+        sale.saleName = click.prompt('Enter sale name', value_proc=str)
+        sale.regularPrice = click.prompt('Enter regular cost', value_proc=str)
         sale.salePrice = str(math.floor(int(sale.regularPrice)))
 
         if sale.isSkin:
-            sale.splashArt = str(click.prompt('Splash art URL', type=str, default="/#"))
-            sale.inGameArt = str(click.prompt('In-game art URL', type=str, default="/#"))
+            sale.splashArt = click.prompt('Splash art URL', value_proc=str, default="/#")
+            sale.inGameArt = click.prompt('In-game art URL', value_proc=str, default="/#")
         else:
-            sale.infoPage = str(click.prompt('Info page URL', type=str, default="/#"))
+            sale.infoPage = click.prompt('Info page URL', value_proc=str, default="/#")
 
     return naLink, euwLink, dateRange, saleArray
 
@@ -295,6 +312,7 @@ def main(testLink, delay, manual, refresh, verbose):
             sys.exit(sWarning("Did not post."))
         else:
             submit_post(postTitle, postBody)
+            pass
 
     sys.exit(0)
 
