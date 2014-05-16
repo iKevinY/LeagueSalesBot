@@ -20,8 +20,8 @@ class Sale():
     icon = ""
     saleName = ""
     wikiLink = ""
-    saleCost = ""
-    regularCost = ""
+    salePrice = ""
+    regularPrice = ""
     champName = ""
 
 class Skin(Sale):
@@ -38,6 +38,15 @@ class Champ(Sale):
 def sSpecial(s): return '\033[36m' + s + '\033[0m'
 def sSuccess(s): return '\033[32m' + s + '\033[0m'
 def sWarning(s): return '\033[31m' + s + '\033[0m'
+
+
+def load_page(link):
+    try:
+        resp, content = httplib2.Http().request(link)
+    except httplib2.ServerNotFoundError:
+        sys.exit(sWarning("Connection error."))
+    else:
+        return resp, content
 
 
 def format_range(saleStart, saleEnd):
@@ -57,17 +66,14 @@ def get_content(testLink, delay, refresh, verbose):
         if not verbose:
             print testLink + "...",
 
-        try:
-            header, content = httplib2.Http().request(testLink)
-        except httplib2.ServerNotFoundError:
-            sys.exit(sWarning("Connection error."))
+        resp, content = load_page(testLink)
 
-        if header.status != 200:
-            print (sWarning(str(header.status)))
+        if resp.status != 200:
+            print (sWarning(str(resp.status)))
             sys.exit(sWarning("Terminating script."))
         else:
             if not verbose:
-                print sSuccess(str(header.status))
+                print sSuccess(str(resp.status))
 
             try:
                 start, end = re.findall(".*(\d{4})-(\d{4})", testLink)[0]
@@ -107,17 +113,13 @@ def get_content(testLink, delay, refresh, verbose):
 
         while not (naLink or euwLink):
             for i, link in enumerate(links):
-                try:
-                    header, content = httplib2.Http().request(link)
-                except httplib2.ServerNotFoundError:
-                    sys.exit(sWarning("Connection error."))
-
+                resp, content = load_page(link)
                 print link + "..." + ' ' * ("//na" in link),
 
-                if header.status != 200:
-                    print sWarning(str(header.status))
+                if resp.status != 200:
+                    print sWarning(str(resp.status))
                 else:
-                    print sSuccess(str(header.status))
+                    print sSuccess(str(resp.status))
                     naLink, euwLink = links[i % 2], links[(i % 2) + 2]
                     break
             else:
@@ -129,27 +131,26 @@ def get_content(testLink, delay, refresh, verbose):
 
         print sSuccess("Post found!") + '\n'
 
-    saleRegex = re.compile("<h4>(?:<a href.+?>)*\s*?(.+?)\s*?(?:<\/a>)*<\/h4>\s+?<strike.*?>(\d{3,4})<\/strike> (\d{3,4}) RP")
-    skinRegex = re.compile("(http://riot-web-static\.s3\.amazonaws\.com/images/news/Skin_Sales/\S+?\.jpg)")
-    infoRegex = re.compile("\"(http://gameinfo.(?:na|euw).leagueoflegends.com/en/game-info/champions/\S+?)\"")
+    saleList = re.findall("<h4>(?:<a .+?>)*\s*?(.+?)\s*?(?:<\/a>)*<\/h4>\s+?<strike.*?>(\d+?)<\/strike> (\d+?) RP", content)
+    skinList = re.findall("(http://riot-web-static\.s3\.amazonaws\.com/images/news/Skin_Sales/\S+?\.jpg)", content)
+    infoList = re.findall("\"(http://gameinfo.(?:na|euw).leagueoflegends.com/en/game-info/champions/\S+?)\"", content)
 
     saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
 
     for i, sale in enumerate(saleArray):
         try:
-            sale.saleName, sale.regularCost, sale.saleCost = re.findall(saleRegex, content)[i]
+            sale.saleName, sale.regularPrice, sale.salePrice = saleList[i]
         except IndexError:
-            sys.exit(sWarning("Sale data could not be parsed (possible change in formatting)."))
+            sys.exit(sWarning("Sale data could not be parsed by regexes."))
 
         if sale.isSkin:
-            sale.splashArt = re.findall(skinRegex, content)[i * 4]
-            sale.inGameArt = re.findall(skinRegex, content)[(i * 4) + 2]
+            sale.splashArt = skinList[i * 4]
+            sale.inGameArt = skinList[(i * 4) + 2]
         else:
-            sale.infoPage = re.findall(infoRegex, content)[(i - 3) * 2].replace(".euw.", ".na.")
+            sale.infoPage = infoList[(i - 3) * 2].replace(".euw.", ".na.")
 
-    # Swap first and second skin sales if second skin sale is a 1350 RP skin
-    if int(saleArray[1].regularCost) > int(saleArray[0].regularCost):
-        saleArray[0], saleArray[1] = saleArray[1], saleArray[0]
+    # Sorts sale array by skins > champions and then by price
+    saleArray.sort(key=lambda sale: (sale.isSkin, sale.salePrice), reverse=True)
 
     return naLink, euwLink, dateRange, saleArray
 
@@ -167,21 +168,21 @@ def sale_output(sale):
             if sale.saleName in settings.exceptSkins:
                 sale.champName = settings.exceptSkins[sale.saleName]
             else:
-                sale.champName = sale.saleName.split()[-1] # Champion name is final word of skin name
+                sale.champName = sale.saleName.split()[-1]
 
-        mediaString = "**[Skin Spotlight]({0})**, [Splash Art]({1}), [In-Game]({2})".format(
+        resourceString = "**[Skin Spotlight]({0})**, [Splash Art]({1}), [In-Game]({2})".format(
             sale.spotlight, sale.splashArt, sale.inGameArt)
     else:
         sale.champName = sale.saleName
-        mediaString = ("**[Champion Spotlight]({0})**, [Official Info Page]({1})".format(sale.spotlight, sale.infoPage))
+        resourceString = ("**[Champion Spotlight]({0})**, [Official Info Page]({1})".format(sale.spotlight, sale.infoPage))
 
     sale.wikiLink = "http://leagueoflegends.wikia.com/wiki/" + sale.champName.replace(" ", "_")
 
-    # Remove spaces, periods, and apostrophes from champion name to generate icon
+    # Remove spaces, periods, and apostrophes from champion name to generate icon string
     sale.icon = "[](/{0})".format(re.sub('\ |\.|\'', '', sale.champName.lower()))
 
     return "|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}|".format(
-        sale.icon, sale.saleName, sale.wikiLink, sale.saleCost, sale.regularCost, mediaString)
+        sale.icon, sale.saleName, sale.wikiLink, sale.salePrice, sale.regularPrice, resourceString)
 
 
 def make_post(saleArray, dateRange, naLink, euwLink):
@@ -206,18 +207,9 @@ def make_post(saleArray, dateRange, naLink, euwLink):
 
 def get_spotlight(name, isSkin):
     """Finds appropriate champion or skin spotlight video for sale"""
-    if isSkin:
-        channel = "SkinSpotlights"
-        suffix = "+Skin+Spotlight"
-    else:
-        channel = "RiotGamesInc"
-        suffix = "+Champion+Spotlight"
-
-    try:
-        header, content = httplib2.Http().request(
-            "https://www.youtube.com/user/" + channel + "/search?query=" + name.replace(" ", "+") + suffix)
-    except httplib2.ServerNotFoundError:
-        sys.exit(sWarning("Connection error."))
+    channel, suffix = ("SkinSpotlights", "+Skin+Spotlight") if isSkin else ("RiotGamesInc", "+Champion+Spotlight")
+    resp, content = load_page("https://www.youtube.com/user/{0}/search?query={1}".format(
+        channel, name.replace(" ", "+"), suffix))
 
     try:
         slug, spotlightName = re.findall("<h3 class=\"yt-lockup-title\"><a .* href=\"(\S*)\">(.*)<\/a><\/h3>", content)[0]
@@ -300,7 +292,7 @@ def main(testLink, delay, manual, refresh, verbose):
     for sale in saleArray:
         sale.spotlight, sale.spotlightName = get_spotlight(sale.saleName, sale.isSkin)
         if not verbose:
-            print '{: <30}'.format(sale.saleName) + sale.saleCost + " RP\t" + sale.spotlightName
+            print '{: <30}'.format(sale.saleName) + sale.salePrice + " RP\t" + sale.spotlightName
 
     postBody = make_post(saleArray, dateRange, naLink, euwLink)
 
