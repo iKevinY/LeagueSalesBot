@@ -98,9 +98,10 @@ def get_content(testLink, delay, refresh, verbose):
 
         monthDate = saleStart.strftime("%m%d"), saleEnd.strftime("%m%d")
         dateMonth = saleStart.strftime("%d%m"), saleEnd.strftime("%d%m")
+        linkPerms = (("na", monthDate), ("na", dateMonth), ("euw", dateMonth), ("euw", monthDate))
 
-        links = ["http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}".format(
-            l[0], *l[1]) for l in (("na", monthDate), ("na", dateMonth), ("euw", dateMonth), ("euw", monthDate))]
+        baseLink = "http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}"
+        links = [baseLink.format(l[0], *l[1]) for l in linkPerms]
 
         naLink, euwLink = None, None
 
@@ -131,9 +132,13 @@ def get_content(testLink, delay, refresh, verbose):
 
         print sSuccess("Post found!") + '\n'
 
-    saleList = re.findall("<h4>(?:<a .+?>)*\s*?(.+?)\s*?(?:<\/a>)*<\/h4>\s+?<strike.*?>(\d+?)<\/strike> (\d+?) RP", content)
-    skinList = re.findall("(http://riot-web-static\.s3\.amazonaws\.com/images/news/Skin_Sales/\S+?\.jpg)", content)
-    infoList = re.findall("\"(http://gameinfo.(?:na|euw).leagueoflegends.com/en/game-info/champions/\S+?)\"", content)
+    regexes = (
+        "<h4>(?:<a .+?>)*\s*?(.+?)\s*?(?:<\/a>)*<\/h4>\s+?<strike.*?>(\d+?)<\/strike> (\d+?) RP",
+        "(http://riot-web-static\.s3\.amazonaws\.com/images/news/Skin_Sales/\S+?\.jpg)",
+        "\"(http://gameinfo.(?:na|euw).leagueoflegends.com/en/game-info/champions/\S+?)\""
+    )
+
+    saleList, skinList, infoList = (re.findall(regex, content) for regex in regexes)
 
     saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
 
@@ -187,7 +192,6 @@ def sale_output(sale):
 
 def make_post(saleArray, dateRange, naLink, euwLink):
     """Formats sale data into Reddit post"""
-
     # Determine prices of next sale skins given the previous sale (stored in lastrun.py)
     nextRotation = ((975, 750, 520), (1350, 975, 520), (975, 750, 520), (975, 975, 520))[lastrun.rotation % 4]
 
@@ -226,16 +230,18 @@ def submit_post(postTitle, postBody):
 
     for i, subreddit in enumerate(settings.subreddits):
         submission = r.submit(subreddit, postTitle, text=postBody)
-        sSuccess("({0}/{1}) Posted to /r/{0} ({1})".format(
+        sSuccess("({0}/{1}) Posted to /r/{2} ({3})".format(
             i + 1, len(settings.subreddits), subreddit, submission.permalink))
         time.sleep(3)
 
     saleEndText = (datetime.datetime.now() + datetime.timedelta(4)).strftime("%Y-%m-%d")
+    rotationText = str((lastrun.rotation + 5) % 4)
+
     directory = os.path.dirname(os.path.realpath(__file__))
     path = os.path.join(directory, 'lastrun.py')
 
     with open(path, 'r+') as f:
-        f.write("lastSaleEnd = \"{0}\"\nrotation = {1}\n".format(saleEndText, str((lastrun.rotation + 5) % 4)))
+        f.write("lastSaleEnd = \"{0}\"\nrotation = {1}\n".format(saleEndText, rotationText))
 
     print sSuccess("Updated lastrun.py.")
 
@@ -252,8 +258,8 @@ def manual_post():
 
     monthDate = datetime.datetime.strftime(saleStart, "%m%d"), datetime.datetime.strftime(saleEnd, "%m%d")
     dateMonth = datetime.datetime.strftime(saleStart, "%d%m"), datetime.datetime.strftime(saleEnd, "%d%m")
-    naLink, euwLink = ("http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}".format(
-        l[0], *l[1]) for l in (("na", monthDate), ("euw", dateMonth)))
+    baseLink = "http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}"
+    naLink, euwLink = (baseLink.format(l[0], *l[1]) for l in (("na", monthDate), ("euw", dateMonth)))
 
     for i, sale in enumerate(saleArray):
         print "\nSkin #{}".format(i + 1) if sale.isSkin else "\nChampion #{}".format(i - 2)
