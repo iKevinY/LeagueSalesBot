@@ -223,14 +223,17 @@ def submit_post(postTitle, postBody):
     """Post to subreddits defined in settings.py and updates lastrun.py"""
     r = praw.Reddit(user_agent=settings.userAgent)
     r.login(settings.username, settings.password)
-    for subreddit in settings.subreddits:
-        r.submit(subreddit, postTitle, text=postBody)
 
-    print sSuccess("Post successfully submitted to " + ", ".join(settings.subreddits) + ".")
+    for i, subreddit in enumerate(settings.subreddits):
+        submission = r.submit(subreddit, postTitle, text=postBody)
+        sSuccess("({0}/{1}) Posted to /r/{0} ({1})".format(
+            i + 1, len(settings.subreddits), subreddit, submission.permalink))
+        time.sleep(3)
 
     saleEndText = (datetime.datetime.now() + datetime.timedelta(4)).strftime("%Y-%m-%d")
     directory = os.path.dirname(os.path.realpath(__file__))
     path = os.path.join(directory, 'lastrun.py')
+
     with open(path, 'r+') as f:
         f.write("lastSaleEnd = \"{0}\"\nrotation = {1}\n".format(saleEndText, str((lastrun.rotation + 5) % 4)))
 
