@@ -30,7 +30,7 @@ class Champ(Sale):
 
 
 """Define functions for printing ANSI-coloured terminal messages"""
-def sSpecial(s): return '\033[36m' + s + '\033[0m'
+def sSpecial(s): return '\033[1;36m' + s + '\033[0m'
 def sSuccess(s): return '\033[32m' + s + '\033[0m'
 def sWarning(s): return '\033[31m' + s + '\033[0m'
 
@@ -58,7 +58,7 @@ def get_content(testLink, delay, refresh, verbose):
         euwLink = testLink if '//euw' in testLink else '/#'
 
         if not verbose:
-            print testLink + "...",
+            print "Testing {0}...".format(testLink),
 
         resp, content = load_page(testLink)
 
@@ -85,7 +85,7 @@ def get_content(testLink, delay, refresh, verbose):
         Otherwise, the next sale will start on the same day that the last sale ended on.
         """
         lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
-        saleStart = lastSaleEnd + datetime.timedelta((lastrun.rotation + 1) % 2)
+        saleStart = lastSaleEnd + datetime.timedelta((lastrun.lastRotation + 1) % 2)
         saleEnd = saleStart + datetime.timedelta(3) # Four-day sales
 
         dateRange = format_range(saleStart, saleEnd)
@@ -128,8 +128,8 @@ def get_content(testLink, delay, refresh, verbose):
 
     regexes = (
         '<h4>(?:<a .+?>)*\s*?(.+?)\s*?(?:<\/a>)*<\/h4>\s+?<strike.*?>(\d+?)<\/strike> (\d+?) RP',
-        '(http://riot-web-static\.s3\.amazonaws\.com/images/news/Skin_Sales/\S+?\.jpg)',
-        '"(http://gameinfo.(?:na|euw).leagueoflegends.com/en/game-info/champions/\S+?)"'
+        '<a class="lightbox.*?" href="(\S+?)">\n<img .*></a>',
+        '<a href="(http://gameinfo.(?:na|euw).leagueoflegends.com/en/game-info/champions/\S+?)"'
     )
 
     saleList, skinList, infoList = (re.findall(regex, content) for regex in regexes)
@@ -143,12 +143,12 @@ def get_content(testLink, delay, refresh, verbose):
             sys.exit(sWarning("Sale data could not be parsed by regexes."))
 
         if sale.isSkin:
-            sale.splashArt = skinList[i * 4]
-            sale.inGameArt = skinList[(i * 4) + 2]
+            sale.splashArt = skinList[i*2]
+            sale.inGameArt = skinList[i*2 + 1]
         else:
             sale.infoPage = infoList[(i - 3) * 2].replace('.euw.', '.na.')
 
-    # Sorts sale array by skins > champions and then by price
+    # Sorts sale array by skins > champions and then by price (in reverse)
     saleArray.sort(key=lambda sale: (sale.isSkin, sale.salePrice), reverse=True)
 
     return naLink, euwLink, dateRange, saleArray
@@ -173,21 +173,23 @@ def sale_output(sale):
             sale.spotlight, sale.splashArt, sale.inGameArt)
     else:
         sale.champName = sale.saleName
-        resourceString = ('[Champion Spotlight]({0}), [Official Info Page]({1})'.format(sale.spotlight, sale.infoPage))
+        resourceString = ('[Champion Spotlight]({0}), [Official Info Page]({1})'.format(
+            sale.spotlight, sale.infoPage))
 
     sale.wikiLink = 'http://leagueoflegends.wikia.com/wiki/' + sale.champName.replace(' ', '_')
 
     # Remove spaces, periods, and apostrophes from champion name to generate icon string
     sale.icon = '[](/{0})'.format(re.sub('\ |\.|\'', '', sale.champName.lower()))
 
-    return '|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}|'.format(
-        sale.icon, sale.saleName, sale.wikiLink, sale.salePrice, sale.regularPrice, resourceString)
+    sArgs = sale.icon, sale.saleName, sale.wikiLink, sale.salePrice, sale.regularPrice, resourceString
+    return '|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}|'.format(*sArgs)
 
 
-def make_post(saleArray, dateRange, naLink, euwLink):
+def make_post(saleArray, naLink, euwLink):
     """Formats sale data into Reddit post"""
     # Determine prices of next sale skins given the previous sale (stored in lastrun.py)
-    nextRotation = ((975, 750, 520), (1350, 975, 520), (975, 750, 520), (975, 975, 520))[lastrun.rotation % 4]
+    rotation = [(975, 750, 520), (1350, 975, 520), (975, 750, 520), (975, 975, 520)]
+    nextRotation = rotation[(lastrun.lastRotation + 2) % 4]
 
     return (
         '| Icon | Skin/Champion | Sale Price | Regular Price | Resources |\n' +
@@ -199,22 +201,27 @@ def make_post(saleArray, dateRange, naLink, euwLink):
         '## Frequently Asked Questions\n\n' +
         '\n\n'.join('> **{0}**\n\n{1}'.format(*qa) for qa in settings.faqArray) +
         '\n\n----\n' +
-        '^Coded ^by ^/u/Pewqazz. ^Feedback, ^suggestions, ^and ^bug ^reports ^are ^welcomed ^in ^/r/LeagueSalesBot.'
+        '^Coded ^by ^/u/Pewqazz. ^Feedback, ^suggestions, ^and ^bug ^reports '
+        '^are ^welcomed ^in ^/r/LeagueSalesBot.'
     )
 
 
-def get_spotlight(name, isSkin):
+def get_spotlight(saleName, isSkin):
     """Finds appropriate champion or skin spotlight video for sale"""
-    channel, suffix = ('SkinSpotlights', '+Skin+Spotlight') if isSkin else ('RiotGamesInc', '+Champion+Spotlight')
-    resp, content = load_page('https://www.youtube.com/user/{0}/search?query={1}'.format(
-        channel, name.replace(' ', '+'), suffix))
+    if isSkin:
+        channel, suffix = ('SkinSpotlights', '+Skin+Spotlight')
+    else:
+        channel, suffix = ('RiotGamesInc', '+Champion+Spotlight')
+
+    searchTerm = saleName.replace(' ', '+')
+    videoPage = 'https://www.youtube.com/user/{0}/search?query={1}'.format(channel, searchTerm, suffix)
+    resp, content = load_page(videoPage)
 
     try:
-        slug, spotlightName = re.findall('<h3 class="yt-lockup-title"><a .* href="(\S*)">(.*)<\/a><\/h3>', content)[0]
+        slug, spotlightName = re.findall('<h3 class="yt-lockup-title"><a.*?href="(\S*)">(.*)</a></h3>', content)[0]
+        return 'https://www.youtube.com' + slug, spotlightName
     except IndexError:
         return '/#', "No spotlight found."
-    else:
-        return 'https://www.youtube.com' + slug, spotlightName
 
 
 def submit_post(postTitle, postBody):
@@ -229,13 +236,13 @@ def submit_post(postTitle, postBody):
         time.sleep(3)
 
     saleEndText = (datetime.datetime.now() + datetime.timedelta(4)).strftime('%Y-%m-%d')
-    rotationText = str((lastrun.rotation + 5) % 4)
+    rotationText = str((lastrun.lastRotation + 1) % 4)
 
     directory = os.path.dirname(os.path.realpath(__file__))
     path = os.path.join(directory, 'lastrun.py')
 
     with open(path, 'r+') as f:
-        f.write('lastSaleEnd = "{0}"\nrotation = {1}\n'.format(saleEndText, rotationText))
+        f.write('lastSaleEnd = "{0}"\nlastRotation = {1}\n'.format(saleEndText, rotationText))
 
     print sSuccess("Updated lastrun.py.")
 
@@ -276,7 +283,7 @@ def manual_post():
 @click.option('--delay', '-d', 'delay', default=0, help="Delay before running script.", metavar='<hours>')
 @click.option('--manual', '-m', 'manual', is_flag=True, help="Manually create post.")
 @click.option('--refresh', '-r', 'refresh', is_flag=True, help="Automatically refresh sale pages.")
-@click.option('--verbose', '-v', 'verbose', is_flag=True, help="Output entire post body (for piping to pbcopy).")
+@click.option('--verbose', '-v', 'verbose', is_flag=True, help="Output entire post body.")
 
 def main(testLink, delay, manual, refresh, verbose):
     """
@@ -284,9 +291,13 @@ def main(testLink, delay, manual, refresh, verbose):
     Legends champion and skin sales. Uses the httplib2 and PRAW libraries.
     """
 
-    naLink, euwLink, dateRange, saleArray = manual_post() if manual else get_content(testLink, delay, refresh, verbose)
+    if manual:
+        naLink, euwLink, dateRange, saleArray = manual_post()
+    else:
+        naLink, euwLink, dateRange, saleArray = get_content(testLink, delay, refresh, verbose)
 
-    postTitle = '[Skin Sale] ' + ', '.join(sale.saleName for sale in saleArray if sale.isSkin) + ' (' + dateRange + ')'
+    skinSales = ', '.join(sale.saleName for sale in saleArray if sale.isSkin)
+    postTitle = '[Skin Sale] {0} ({1})'.format(skinSales, dateRange)
 
     if not verbose:
         print sSpecial(postTitle)
@@ -297,10 +308,8 @@ def main(testLink, delay, manual, refresh, verbose):
         if not verbose:
             print '{: <30}'.format(sale.saleName) + sale.salePrice + ' RP\t' + sale.spotlightName
 
-    postBody = make_post(saleArray, dateRange, naLink, euwLink)
-
-    if verbose:
-        print postBody
+    postBody = make_post(saleArray, naLink, euwLink)
+    print postBody if verbose else sSuccess("Post formatted successfully.")
 
     if not testLink:
         if manual and not click.confirm("Post to Reddit?"):
