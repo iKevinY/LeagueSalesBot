@@ -1,7 +1,7 @@
 #! /usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os, sys, re, datetime, time, math
+import os, sys, re, datetime, time
 
 import httplib2
 import praw
@@ -229,10 +229,9 @@ def submit_post(postTitle, postBody):
     r = praw.Reddit(user_agent=settings.userAgent)
     r.login(settings.username, settings.password)
 
-    for i, subreddit in enumerate(settings.subreddits):
-        submission = r.submit(subreddit, postTitle, text=postBody)
-        sSuccess("({0}/{1}) Posted to /r/{2} ({3})".format(
-            i + 1, len(settings.subreddits), subreddit, submission.permalink))
+    for subreddit in subreddits:
+        post = r.submit(subreddit, postTitle, text=postBody)
+        sSuccess("Posted to /r/{0} at {1}".format(subreddit, post.permalink))
         time.sleep(3)
 
     saleEndText = (datetime.datetime.now() + datetime.timedelta(4)).strftime('%Y-%m-%d')
@@ -267,7 +266,7 @@ def manual_post():
 
         sale.saleName = click.prompt("Enter sale name", value_proc=str)
         sale.regularPrice = click.prompt("Enter regular cost", value_proc=str)
-        sale.salePrice = str(math.floor(int(sale.regularPrice)))
+        sale.salePrice = str(int(sale.regularPrice) // 2)
 
         if sale.isSkin:
             sale.splashArt = click.prompt("Splash art URL", value_proc=str, default='/#')
