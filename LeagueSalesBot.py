@@ -51,6 +51,22 @@ def format_range(saleStart, saleEnd):
         return '{0} – {1}'.format(saleStart.strftime('%B %-d'), saleEnd.strftime('%B %-d'))
 
 
+def format_resources(sale):
+    """Formats sale resources into string if existent"""
+    if sale.isSkin:
+        resourceItems = [
+            (sale.spotlight, 'Skin Spotlight'),
+            (sale.splashArt, 'Splash Art'),
+            (sale.inGameArt, 'In-Game')]
+    else:
+        resourceItems = [
+            (sale.spotlight, 'Champion Spotlight'),
+            (sale.infoPage, 'Official Info Page')]
+
+    return ', '.join(
+        ['[{0}]({1})'.format(text, link) for link, text in resourceItems if link is not None])
+
+
 def get_content(testLink, delay, refresh, verbose):
     """Loads appropriate content based on most recent sale or supplied test link"""
     if testLink:
@@ -143,10 +159,18 @@ def get_content(testLink, delay, refresh, verbose):
             sys.exit(sWarning("Sale data could not be parsed by regexes."))
 
         if sale.isSkin:
-            sale.splashArt = skinList[i*2]
-            sale.inGameArt = skinList[i*2 + 1]
+            try:
+                sale.splashArt = skinList[i*2]
+                sale.inGameArt = skinList[i*2 + 1]
+            except IndexError:
+                sWarning("Art for " + sale.saleName + " not parsed.")
+                sale.splashArt, sale.inGameArt = None, None
         else:
-            sale.infoPage = infoList[(i - 3) * 2].replace('.euw.', '.na.')
+            try:
+                sale.infoPage = infoList[(i - 3) * 2].replace('.euw.', '.na.')
+            except IndexError:
+                sWarning("Info page for " + sale.saleName + " not parsed.")
+                sale.infoPage = None
 
     # Sorts sale array by skins > champions and then by price (in reverse)
     saleArray.sort(key=lambda sale: (sale.isSkin, sale.salePrice), reverse=True)
@@ -168,21 +192,16 @@ def sale_output(sale):
                 sale.champName = settings.exceptSkins[sale.saleName]
             else:
                 sale.champName = sale.saleName.split()[-1]
-
-        resourceString = '[Skin Spotlight]({0}), [Splash Art]({1}), [In-Game]({2})'.format(
-            sale.spotlight, sale.splashArt, sale.inGameArt)
     else:
         sale.champName = sale.saleName
-        resourceString = ('[Champion Spotlight]({0}), [Official Info Page]({1})'.format(
-            sale.spotlight, sale.infoPage))
 
     sale.wikiLink = 'http://leagueoflegends.wikia.com/wiki/' + sale.champName.replace(' ', '_')
 
     # Remove spaces, periods, and apostrophes from champion name to generate icon string
     sale.icon = '[](/{0})'.format(re.sub('\ |\.|\'', '', sale.champName.lower()))
 
-    sArgs = sale.icon, sale.saleName, sale.wikiLink, sale.salePrice, sale.regularPrice, resourceString
-    return '|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}|'.format(*sArgs)
+    args = sale.icon, sale.saleName, sale.wikiLink, sale.salePrice, sale.regularPrice, format_resources(sale)
+    return '|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}|'.format(*args)
 
 
 def make_post(saleArray, naLink, euwLink):
@@ -221,7 +240,7 @@ def get_spotlight(saleName, isSkin):
         slug, spotlightName = re.findall('<h3 class="yt-lockup-title"><a.*?href="(\S*)">(.*)</a></h3>', content)[0]
         return 'https://www.youtube.com' + slug, spotlightName
     except IndexError:
-        return '/#', "No spotlight found."
+        return None, "No spotlight found."
 
 
 def submit_post(postTitle, postBody):
@@ -229,7 +248,7 @@ def submit_post(postTitle, postBody):
     r = praw.Reddit(user_agent=settings.userAgent)
     r.login(settings.username, settings.password)
 
-    for subreddit in subreddits:
+    for subreddit in settings.subreddits:
         post = r.submit(subreddit, postTitle, text=postBody)
         sSuccess("Posted to /r/{0} at {1}".format(subreddit, post.permalink))
         time.sleep(3)
