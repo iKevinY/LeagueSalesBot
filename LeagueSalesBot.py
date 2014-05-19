@@ -12,21 +12,19 @@ import lastrun
 
 """Create classes for sale types (skins and champions)"""
 class Sale():
-    icon = ''
     saleName = ''
-    wikiLink = ''
     salePrice = ''
     regularPrice = ''
-    champName = ''
+    spotlight = None
 
 class Skin(Sale):
     isSkin = True
-    splashArt = ''
-    inGameArt = ''
+    splashArt = None
+    inGameArt = None
 
 class Champ(Sale):
     isSkin = False
-    infoPage = ''
+    infoPage = None
 
 
 """Define functions for printing ANSI-coloured terminal messages"""
@@ -54,17 +52,20 @@ def format_range(saleStart, saleEnd):
 def format_resources(sale):
     """Formats sale resources into string if existent"""
     if sale.isSkin:
-        resourceItems = [
+        resources = (
             (sale.spotlight, 'Skin Spotlight'),
             (sale.splashArt, 'Splash Art'),
-            (sale.inGameArt, 'In-Game')]
+            (sale.inGameArt, 'In-Game'),
+        )
+
     else:
-        resourceItems = [
+        resources = (
             (sale.spotlight, 'Champion Spotlight'),
-            (sale.infoPage, 'Official Info Page')]
+            (sale.infoPage, 'Official Info Page'),
+        )
 
     return ', '.join(
-        ['[{0}]({1})'.format(text, link) for link, text in resourceItems if link is not None])
+        ['[{0}]({1})'.format(text, link) for link, text in resources if link is not None])
 
 
 def get_content(testLink, delay, refresh, verbose):
@@ -125,7 +126,7 @@ def get_content(testLink, delay, refresh, verbose):
         while not (naLink or euwLink):
             for i, link in enumerate(links):
                 resp, content = load_page(link)
-                print link + "..." + " " * ('//na' in link),
+                print link + "...\t",
 
                 if resp.status != 200:
                     print sWarning(str(resp.status))
@@ -142,10 +143,11 @@ def get_content(testLink, delay, refresh, verbose):
 
         print sSuccess("Post found!") + '\n'
 
+    # Define regexes for sales, skin art, and champion info pages
     regexes = (
         '<h4>(?:<a .+?>)*\s*?(.+?)\s*?(?:<\/a>)*<\/h4>\s+?<strike.*?>(\d+?)<\/strike> (\d+?) RP',
         '<a class="lightbox.*?" href="(\S+?)">\n<img .*></a>',
-        '<a href="(http://gameinfo.(?:na|euw).leagueoflegends.com/en/game-info/champions/\S+?)"'
+        '<a href="(http://gameinfo.(?:na|euw).leagueoflegends.com/en/game-info/champions/\S+?)"',
     )
 
     saleList, skinList, infoList = (re.findall(regex, content) for regex in regexes)
@@ -167,6 +169,7 @@ def get_content(testLink, delay, refresh, verbose):
                 sale.splashArt, sale.inGameArt = None, None
         else:
             try:
+                # Force NA champion info page
                 sale.infoPage = infoList[(i - 3) * 2].replace('.euw.', '.na.')
             except IndexError:
                 sWarning("Info page for " + sale.saleName + " not parsed.")
@@ -200,8 +203,9 @@ def sale_output(sale):
     # Remove spaces, periods, and apostrophes from champion name to generate icon string
     sale.icon = '[](/{0})'.format(re.sub('\ |\.|\'', '', sale.champName.lower()))
 
-    args = sale.icon, sale.saleName, sale.wikiLink, sale.salePrice, sale.regularPrice, format_resources(sale)
-    return '|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}|'.format(*args)
+    return '|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}|'.format(
+        sale.icon, sale.saleName, sale.wikiLink, sale.salePrice,
+        sale.regularPrice, format_resources(sale))
 
 
 def make_post(saleArray, naLink, euwLink):
@@ -219,7 +223,7 @@ def make_post(saleArray, naLink, euwLink):
         '\n\n----\n\n' +
         '## Frequently Asked Questions\n\n' +
         '\n\n'.join('> **{0}**\n\n{1}'.format(*qa) for qa in settings.faqArray) +
-        '\n\n----\n' +
+        '\n\n----\n\n' +
         '^Coded ^by ^/u/Pewqazz. ^Feedback, ^suggestions, ^and ^bug ^reports '
         '^are ^welcomed ^in ^/r/LeagueSalesBot.'
     )
@@ -237,14 +241,15 @@ def get_spotlight(saleName, isSkin):
     resp, content = load_page(videoPage)
 
     try:
-        slug, spotlightName = re.findall('<h3 class="yt-lockup-title"><a.*?href="(\S*)">(.*)</a></h3>', content)[0]
+        searchResult = '<h3 class="yt-lockup-title"><a.*?href="(\S*)">(.*)</a></h3>'
+        slug, spotlightName = re.findall(searchResult, content)[0]
         return 'https://www.youtube.com' + slug, spotlightName
     except IndexError:
         return None, "No spotlight found."
 
 
 def submit_post(postTitle, postBody):
-    """Post to subreddits defined in settings.py and updates lastrun.py"""
+    """Posts to subreddits defined in settings.py and updates lastrun.py"""
     r = praw.Reddit(user_agent=settings.userAgent)
     r.login(settings.username, settings.password)
 
@@ -262,7 +267,7 @@ def submit_post(postTitle, postBody):
     with open(path, 'r+') as f:
         f.write('lastSaleEnd = "{0}"\nlastRotation = {1}\n'.format(saleEndText, rotationText))
 
-    print sSuccess("Updated lastrun.py.")
+    print sSuccess("Updated lastrun.py to ({0}, {1}).".format(saleEndText, rotationText))
 
 
 def manual_post():
@@ -334,7 +339,6 @@ def main(testLink, delay, manual, refresh, verbose):
             sys.exit(sWarning("Did not post."))
         else:
             submit_post(postTitle, postBody)
-            pass
 
     sys.exit(0)
 
