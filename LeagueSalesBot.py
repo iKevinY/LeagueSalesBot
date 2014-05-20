@@ -1,7 +1,11 @@
 #! /usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os, sys, re, datetime, time
+import os
+import sys
+import re
+import datetime
+import time
 
 import httplib2
 import praw
@@ -107,9 +111,13 @@ def get_content(testLink, delay=None, refresh=None, verbose=None):
         so the next sale will start a day after the end date of the previous sale.
         Otherwise, the next sale will start on the same day that the last sale ended on.
         """
-        lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
-        saleStart = lastSaleEnd + datetime.timedelta((lastrun.lastRotation + 1) % 2)
-        saleEnd = saleStart + datetime.timedelta(3) # Four-day sales
+        try:
+            lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
+            saleStart = lastSaleEnd + datetime.timedelta((lastrun.lastRotation + 1) % 2)
+            saleEnd = saleStart + datetime.timedelta(3) # Four-day sales
+        except AttributeError:
+            print sWarning("Invalid data in lastrun.py. Attemping to repair.")
+            repair_lastrun()
 
         dateRange = format_range(saleStart, saleEnd)
 
@@ -125,7 +133,8 @@ def get_content(testLink, delay=None, refresh=None, verbose=None):
             sSpecial(lastSaleEnd.strftime("%B %-d")), sSpecial(dateRange))
 
         if delay:
-            print "Sleeping for {0} hour{1}.".format(str(delay), "s" * (delay != 1))
+            delay = int(delay) if delay.is_integer() else delay
+            print "Sleeping for {0} hour{1}.".format(delay, "s" * (delay != 1))
             time.sleep(delay * 60 * 60)
 
         saleLink = None
@@ -294,6 +303,11 @@ def post_to_reddit(postTitle, postBody, saleLink):
 
 def update_lastrun(saleEndText, rotationIndex=None):
     """Updates lastrun.py with sale date and rotation information"""
+    try:
+        lastSaleEnd, lastRotation = lastrun.lastSaleEnd, lastrun.lastRotation
+    except AttributeError:
+        lastSaleEnd, lastRotation = None, None
+
     if not rotationIndex:
         try:
             rotationIndex = (lastrun.lastRotation + 1) % 4
@@ -303,16 +317,12 @@ def update_lastrun(saleEndText, rotationIndex=None):
     directory = os.path.dirname(os.path.realpath(__file__))
     path = os.path.join(directory, 'lastrun.py')
 
-    try:
-        print sSuccess("Modified lastrun.py from ({0}, {1})".format(
-            lastrun.lastSaleEnd, lastrun.lastRotation)),
-    except AttributeError:
-        print sSuccess("Modified lastrun.py from ()"),
+    print sSuccess("Modified lastrun.py from ({0}, {1}) to".format(lastSaleEnd, lastRotation)),
 
     with open(path, 'w+') as f:
         f.write('lastSaleEnd = "{0}"\nlastRotation = {1}\n'.format(saleEndText, rotationIndex))
 
-    print sSuccess("to ({0}, {1}).".format(saleEndText, rotationIndex))
+    print sSuccess("({0}, {1}).".format(saleEndText, rotationIndex))
 
 
 def manual_post():
@@ -374,9 +384,8 @@ def repair_lastrun():
     else:
         sys.exit(sWarning("Could not repair sale date data."))
 
-    rotation = [tuple(str(num) for num in x) for x in
-        [(975, 750, 520), (1350, 975, 520), (975, 750, 520), (975, 975, 520)]
-    ]
+    cycle = [(975, 750, 520), (1350, 975, 520), (975, 750, 520), (975, 975, 520)]
+    rotation = [tuple(str(num) for num in x) for x in cycle]
 
     def get_rotation(link):
         _, _, saleArray = get_content(link)
@@ -405,14 +414,16 @@ def repair_lastrun():
         lastRotationIndex = rotation.index(lastRotation)
 
     lastSaleEndText = datetime.datetime.strftime(lastSaleEnd, '%Y-%m-%d')
-
     update_lastrun(lastSaleEndText, rotationIndex=lastRotationIndex)
-    sys.exit()
+
+    nextRotation = rotation[(lastRotationIndex + 1) % 4]
+    print sSpecial("Next skin sale is {0} RP, {1} RP, {2} RP.".format(*nextRotation))
+    sys.exit(sSuccess("lastrun.py repaired successfully."))
 
 
 @click.command()
 @click.argument('testLink', required=False)
-@click.option('--delay', '-d', default=0, help="Delay before running script.", metavar='<hours>')
+@click.option('--delay', '-d', default=0.0, help="Delay before running script.", metavar='<hours>')
 @click.option('--last', '-l', is_flag=True, help="Crawls most recent sale data.")
 @click.option('--manual', '-m', is_flag=True, help="Manually create post.")
 @click.option('--refresh', '-r', is_flag=True, help="Automatically refresh sale pages.")
