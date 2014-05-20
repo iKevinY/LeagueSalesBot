@@ -132,6 +132,7 @@ def get_content(testLink, delay, refresh, verbose):
                     print sWarning(str(resp.status))
                 else:
                     print sSuccess(str(resp.status))
+                    postLink = link
                     naLink, euwLink = links[i % 2], links[(i % 2) + 2]
                     break
             else:
@@ -140,8 +141,6 @@ def get_content(testLink, delay, refresh, verbose):
                     time.sleep(15)
                 else:
                     sys.exit(sWarning("Terminating script."))
-
-        print sSuccess("Post found!") + '\n'
 
     # Define regexes for sales, skin art, and champion info pages
     regexes = (
@@ -178,7 +177,7 @@ def get_content(testLink, delay, refresh, verbose):
     # Sorts sale array by skins > champions and then by price (in reverse)
     saleArray.sort(key=lambda sale: (sale.isSkin, sale.salePrice), reverse=True)
 
-    return naLink, euwLink, dateRange, saleArray
+    return naLink, euwLink, postLink, dateRange, saleArray
 
 
 def sale_output(sale):
@@ -217,7 +216,7 @@ def make_post(saleArray, naLink, euwLink):
     return (
         '| Icon | Skin/Champion | Sale Price | Regular Price | Resources |\n' +
         '|:----:|:-------------:|:----------:|:-------------:|:---------:|\n' +
-        ''.join(sale_output(sale) + '\n' for sale in saleArray) +
+        '\n'.join(sale_output(sale) for sale in saleArray) + '\n\n' +
         'Next skin sale: **{0} RP, {1} RP, {2} RP**. '.format(*nextRotation) +
         'Link to sale pages ([NA]({0}), [EUW]({1})).'.format(naLink, euwLink) +
         '\n\n----\n\n' +
@@ -248,16 +247,8 @@ def get_spotlight(saleName, isSkin):
         return None, "No spotlight found."
 
 
-def submit_post(postTitle, postBody):
-    """Posts to subreddits defined in settings.py and updates lastrun.py"""
-    r = praw.Reddit(user_agent=settings.userAgent)
-    r.login(settings.username, settings.password)
-
-    for subreddit in settings.subreddits:
-        post = r.submit(subreddit, postTitle, text=postBody)
-        sSuccess("Posted to /r/{0} at {1}".format(subreddit, post.permalink))
-        time.sleep(3)
-
+def update_lastrun():
+    """Updates lastrun.py with sale date and rotation information"""
     saleEndText = (datetime.datetime.now() + datetime.timedelta(4)).strftime('%Y-%m-%d')
     rotationText = str((lastrun.lastRotation + 1) % 4)
 
@@ -267,7 +258,7 @@ def submit_post(postTitle, postBody):
     with open(path, 'r+') as f:
         f.write('lastSaleEnd = "{0}"\nlastRotation = {1}\n'.format(saleEndText, rotationText))
 
-    print sSuccess("Updated lastrun.py to ({0}, {1}).".format(saleEndText, rotationText))
+    print sSuccess("Updated lastrun.py.".format(saleEndText, rotationText))
 
 
 def manual_post():
@@ -317,7 +308,7 @@ def main(testLink, delay, manual, refresh, verbose):
     if manual:
         naLink, euwLink, dateRange, saleArray = manual_post()
     else:
-        naLink, euwLink, dateRange, saleArray = get_content(testLink, delay, refresh, verbose)
+        naLink, euwLink, postLink, dateRange, saleArray = get_content(testLink, delay, refresh, verbose)
 
     skinSales = ', '.join(sale.saleName for sale in saleArray if sale.isSkin)
     postTitle = '[Skin Sale] {0} ({1})'.format(skinSales, dateRange)
@@ -338,7 +329,29 @@ def main(testLink, delay, manual, refresh, verbose):
         if manual and not click.confirm("Post to Reddit?"):
             sys.exit(sWarning("Did not post."))
         else:
-            submit_post(postTitle, postBody)
+            # Post to appropriate subreddits
+            r = praw.Reddit(user_agent=settings.userAgent)
+            r.login(settings.username, settings.password)
+
+            for subreddit, isLinkPost in settings.subreddits:
+                if isLinkPost:
+                    submission = r.submit(subreddit, postTitle, url=postLink)
+                    time.sleep(4)
+                else:
+                    submission = r.submit(subreddit, postTitle, text=postBody)
+
+                typeString = "link post" if isLinkPost else "self post"
+
+                print sSuccess("Submitted {0} at {1}/".format(
+                    typeString, submission.permalink.rsplit('/', 2)[0]))
+
+                if isLinkPost:
+                    submission.add_comment(postBody)
+                    print sSuccess("Commented on link post at /r/{0}.".format(subreddit))
+
+                time.sleep(4)
+
+            update_lastrun()
 
     sys.exit(0)
 

@@ -9,7 +9,7 @@ There are a couple of files that this bot uses but are not included in this Git 
 
 ```python
 lastSaleEnd = "2013-08-12"
-rotation = 3
+lastRotation = 3
 ```
 
 `settings.py` contains information like the username and password of the bot, the user agent used, the subreddit the bot is posting to, and also what page the bot should search in order to check for a new sale. In addition, this file stores information about two-part champion names, exception skins, and the FAQ content.
@@ -18,14 +18,28 @@ rotation = 3
 username = "LeagueSalesBot"
 password = ""
 userAgent = ""
-subreddits = ["leagueoflegends", "LeagueSalesBot"]
+
+subreddits = (
+    (subreddit, isLinkPost),
+    ...
+)
 
 # Dictionary containing regexes for champions with two-part names
-twoParts = {".*? Miss Fortune": "Miss Fortune", ".*? Mundo": "Dr. Mundo"}
+twoParts = {
+    ".*? Lee Sin": "Lee Sin",
+    ".*? Mundo": "Dr. Mundo"
+    ...
+}
 
 # Dictionary containing skins not in format "[skin name] [champion name]"
-exceptSkins = {"AstroNautilus": "Nautilus"}
+exceptSkins = {
+    "AstroNautilus": "Nautilus"
+    ...
+}
 
 # Contains question and answer tuples for FAQ
-faqArray = ()
+faqArray = (
+    (question, answer),
+    ...
+)
 ```
