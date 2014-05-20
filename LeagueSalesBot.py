@@ -71,9 +71,6 @@ def format_resources(sale):
 def get_content(testLink, delay, refresh, verbose):
     """Loads appropriate content based on most recent sale or supplied test link"""
     if testLink:
-        naLink = testLink if '//na' in testLink else '/#'
-        euwLink = testLink if '//euw' in testLink else '/#'
-
         if not verbose:
             print "Testing {0}...".format(testLink),
 
@@ -91,9 +88,18 @@ def get_content(testLink, delay, refresh, verbose):
             except IndexError:
                 sys.exit(sWarning("Invalid sale page URL."))
 
-            saleStart = datetime.datetime.strptime(start, '%m%d')
-            saleEnd = datetime.datetime.strptime(end, '%m%d')
-            dateRange = format_range(saleStart, saleEnd)
+            for dateFormat in ('%m%d', '%d%m'):
+                try:
+                    saleStart = datetime.datetime.strptime(start, dateFormat)
+                    saleEnd = datetime.datetime.strptime(end, dateFormat)
+                    dateRange = format_range(saleStart, saleEnd)
+                    break
+                except ValueError:
+                    pass
+            else:
+                sys.exit(sWarning("Sale page URL could not be parsed for date range."))
+
+            saleLink = testLink
 
     else:
         """
@@ -107,24 +113,24 @@ def get_content(testLink, delay, refresh, verbose):
 
         dateRange = format_range(saleStart, saleEnd)
 
-        monthDate = saleStart.strftime('%m%d'), saleEnd.strftime('%m%d')
-        dateMonth = saleStart.strftime('%d%m'), saleEnd.strftime('%d%m')
-        linkPerms = (('na', monthDate), ('na', dateMonth), ('euw', dateMonth), ('euw', monthDate))
+        regions = ('na', 'euw')
+        dateFormats = [(saleStart.strftime(x), saleEnd.strftime(x)) for x in ('%m%d', '%d%m')]
+        linkPerms = ((region, date[0], date[1]) for region in regions for date in dateFormats)
 
         baseLink = 'http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}'
-        links = [baseLink.format(l[0], *l[1]) for l in linkPerms]
+        links = [baseLink.format(*l) for l in linkPerms]
 
-        naLink, euwLink = None, None
-
-        print "Last sale ended on {0}. Requesting {1} sale.".format(
+        print "Last sale ended on {0}. Requesting {1} sale pages.".format(
             sSpecial(lastSaleEnd.strftime("%B %-d")), sSpecial(dateRange))
 
         if delay:
             print "Sleeping for {0} hour{1}.".format(str(delay), 's' * (delay is not 1))
             time.sleep(delay * 60 * 60)
 
-        while not (naLink or euwLink):
-            for i, link in enumerate(links):
+        saleLink = None
+
+        while not saleLink:
+            for link in links:
                 resp, content = load_page(link)
                 print link + "...\t",
 
@@ -132,13 +138,13 @@ def get_content(testLink, delay, refresh, verbose):
                     print sWarning(str(resp.status))
                 else:
                     print sSuccess(str(resp.status))
-                    postLink = link
-                    naLink, euwLink = links[i % 2], links[(i % 2) + 2]
+                    saleLink = link
                     break
             else:
                 if refresh:
-                    print "Reloading every 15 seconds (c-C to force quit)..."
-                    time.sleep(15)
+                    refreshDelay = 15
+                    print "Reloading every {0} seconds (c-C to force quit)...".format(refreshDelay)
+                    time.sleep(refreshDelay)
                 else:
                     sys.exit(sWarning("Terminating script."))
 
@@ -177,7 +183,7 @@ def get_content(testLink, delay, refresh, verbose):
     # Sorts sale array by skins > champions and then by price (in reverse)
     saleArray.sort(key=lambda sale: (sale.isSkin, sale.salePrice), reverse=True)
 
-    return naLink, euwLink, postLink, dateRange, saleArray
+    return saleLink, dateRange, saleArray
 
 
 def sale_output(sale):
@@ -207,7 +213,7 @@ def sale_output(sale):
         sale.regularPrice, format_resources(sale))
 
 
-def make_post(saleArray, naLink, euwLink):
+def make_post(saleArray, saleLink):
     """Formats sale data into Reddit post"""
     # Determine prices of next sale skins given the previous sale (stored in lastrun.py)
     rotation = [(975, 750, 520), (1350, 975, 520), (975, 750, 520), (975, 975, 520)]
@@ -218,7 +224,7 @@ def make_post(saleArray, naLink, euwLink):
         '|:----:|:-------------:|:----------:|:-------------:|:---------:|\n' +
         '\n'.join(sale_output(sale) for sale in saleArray) + '\n\n' +
         'Next skin sale: **{0} RP, {1} RP, {2} RP**. '.format(*nextRotation) +
-        'Link to sale pages ([NA]({0}), [EUW]({1})).'.format(naLink, euwLink) +
+        '[Link to sale page]({0}).'.format(saleLink) +
         '\n\n----\n\n' +
         '## Frequently Asked Questions\n\n' +
         '\n\n'.join('> **{0}**\n\n{1}'.format(*qa) for qa in settings.faqArray) +
@@ -306,9 +312,9 @@ def main(testLink, delay, manual, refresh, verbose):
     """
 
     if manual:
-        naLink, euwLink, dateRange, saleArray = manual_post()
+        saleLink, dateRange, saleArray = manual_post()
     else:
-        naLink, euwLink, postLink, dateRange, saleArray = get_content(testLink, delay, refresh, verbose)
+        saleLink, dateRange, saleArray = get_content(testLink, delay, refresh, verbose)
 
     skinSales = ', '.join(sale.saleName for sale in saleArray if sale.isSkin)
     postTitle = '[Skin Sale] {0} ({1})'.format(skinSales, dateRange)
@@ -322,7 +328,7 @@ def main(testLink, delay, manual, refresh, verbose):
         if not verbose:
             print '{: <30}'.format(sale.saleName) + sale.salePrice + ' RP\t' + sale.spotlightName
 
-    postBody = make_post(saleArray, naLink, euwLink)
+    postBody = make_post(saleArray, saleLink)
     print postBody if verbose else sSuccess("Post formatted successfully.")
 
     if not testLink:
@@ -332,24 +338,25 @@ def main(testLink, delay, manual, refresh, verbose):
             # Post to appropriate subreddits
             r = praw.Reddit(user_agent=settings.userAgent)
             r.login(settings.username, settings.password)
+            rateDelay = 4
 
             for subreddit, isLinkPost in settings.subreddits:
                 if isLinkPost:
-                    submission = r.submit(subreddit, postTitle, url=postLink)
-                    time.sleep(4)
+                    submission = r.submit(subreddit, postTitle, url=saleLink)
+                    time.sleep(rateDelay)
                 else:
                     submission = r.submit(subreddit, postTitle, text=postBody)
 
-                typeString = "link post" if isLinkPost else "self post"
+                typeString = "link" if isLinkPost else "self"
 
-                print sSuccess("Submitted {0} at {1}/".format(
+                print sSuccess("Submitted {0} post at {1}/".format(
                     typeString, submission.permalink.rsplit('/', 2)[0]))
 
                 if isLinkPost:
                     submission.add_comment(postBody)
                     print sSuccess("Commented on link post at /r/{0}.".format(subreddit))
 
-                time.sleep(4)
+                time.sleep(rateDelay)
 
             update_lastrun()
 
