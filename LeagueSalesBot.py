@@ -28,9 +28,9 @@ class Champ(Sale):
 
 
 """Define functions for printing ANSI-coloured terminal messages"""
-def sSpecial(s): return '\033[1;36m' + s + '\033[0m'
-def sSuccess(s): return '\033[32m' + s + '\033[0m'
-def sWarning(s): return '\033[31m' + s + '\033[0m'
+def sSpecial(s): return '\033[1;36m' + str(s) + '\033[0m'
+def sSuccess(s): return '\033[32m' + str(s) + '\033[0m'
+def sWarning(s): return '\033[31m' + str(s) + '\033[0m'
 
 
 def load_page(link):
@@ -77,11 +77,11 @@ def get_content(testLink, delay=None, refresh=None, verbose=None):
         resp, content = load_page(testLink)
 
         if resp.status != 200:
-            print (sWarning(str(resp.status)))
+            print (sWarning(resp.status))
             sys.exit(sWarning("Terminating script."))
         else:
             if not verbose:
-                print sSuccess(str(resp.status))
+                print sSuccess(resp.status)
 
             try:
                 start, end = re.findall('.*(\d{4})-(\d{4})', testLink)[0]
@@ -136,9 +136,9 @@ def get_content(testLink, delay=None, refresh=None, verbose=None):
                 print link + "...\t",
 
                 if resp.status != 200:
-                    print sWarning(str(resp.status))
+                    print sWarning(resp.status)
                 else:
-                    print sSuccess(str(resp.status))
+                    print sSuccess(resp.status)
                     saleLink = link
                     break
             else:
@@ -249,9 +249,17 @@ def get_spotlight(sale, verbose):
     try:
         searchResult = '<h3 class="yt-lockup-title"><a.*?href="(\S*)">(.*)</a></h3>'
         slug, spotlightName = re.findall(searchResult, content)[0]
-        spotlightURL = 'https://www.youtube.com' + slug
+
+        # Handle cases where no spotlight exists (ie. Forecast Janna video for Janna Spotlight)
+        if "Spotlight" not in spotlightName:
+            spotlightURL = None
+        else:
+            spotlightURL = 'https://www.youtube.com' + slug
     except IndexError:
         spotlightURL = None
+
+    if not spotlightURL:
+        spotlightName = sWarning("No spotlight found.")
 
     if not verbose:
         print '{: <30}'.format(sale.saleName) + sale.salePrice + ' RP\t' + spotlightName
@@ -284,42 +292,40 @@ def post_to_reddit(postTitle, postBody, saleLink):
         time.sleep(rateDelay)
 
 
-def update_lastrun(saleEnd=None, rotationIndex=None):
+def update_lastrun(saleEndText, rotationIndex=None):
     """Updates lastrun.py with sale date and rotation information"""
-
-    if saleEnd:
-        saleEndText = saleEnd
-    else:
-        saleEndText = (datetime.datetime.now() + datetime.timedelta(4)).strftime('%Y-%m-%d')
-
-    if rotationIndex:
-        rotationText = rotationIndex
-    else:
-        rotationText = str((lastrun.lastRotation + 1) % 4)
+    if not rotationIndex:
+        try:
+            rotationIndex = (lastrun.lastRotation + 1) % 4
+        except AttributeError:
+            pass
 
     directory = os.path.dirname(os.path.realpath(__file__))
     path = os.path.join(directory, 'lastrun.py')
 
-    print sSuccess("Modified lastrun.py from ({0}, {1})".format(
-        lastrun.lastSaleEnd, lastrun.lastRotation)),
+    try:
+        print sSuccess("Modified lastrun.py from ({0}, {1})".format(
+            lastrun.lastSaleEnd, lastrun.lastRotation)),
+    except AttributeError:
+        print sSuccess("Modified lastrun.py from ()"),
 
-    with open(path, 'r+') as f:
-        f.write('lastSaleEnd = "{0}"\nlastRotation = {1}\n'.format(saleEndText, rotationText))
+    with open(path, 'w+') as f:
+        f.write('lastSaleEnd = "{0}"\nlastRotation = {1}\n'.format(saleEndText, rotationIndex))
 
-    print sSuccess("to ({0}, {1}).".format(saleEndText, rotationText))
+    print sSuccess("to ({0}, {1}).".format(saleEndText, rotationIndex))
 
 
 def manual_post():
     """Manually enter sale data from the CLI"""
     saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
 
-    inputDate = str(datetime.datetime.now().year) + click.prompt("Enter sale start date [MMDD]", type=str)
-    saleStart = datetime.datetime.strptime(inputDate, '%Y%m%d')
+    inputDate = click.prompt("Enter sale start date [YYMMDD]", type=str)
+    saleStart = datetime.datetime.strptime(inputDate, '%y%m%d')
     saleEnd = saleStart + datetime.timedelta(3)
 
     dateRange = format_range(saleStart, saleEnd)
 
-    dateFormat = datetime.datetime.strftime(saleStart, '%m%d'), datetime.datetime.strftime(saleEnd, '%m%d')
+    dateFormat = tuple(datetime.datetime.strftime(date, '%m%d') for date in (saleStart, saleEnd))
     baseLink = 'http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}'
     saleLink = (baseLink.format('na', dateFormat[0], dateFormat[1]))
 
@@ -351,7 +357,23 @@ def extrapolate_link(lastSaleEnd, region='na'):
 
 
 def repair_lastrun():
-    """Called from the CLI to ensure correct rotation data in lastrun.py"""
+    """Called from the CLI to ensure correct data in lastrun.py"""
+    print "Looking for most recent sale page."
+
+    # Run through a week's worth of sale pages starting from datetime.now()
+    for delta in range(4, -3, -1):
+        endDate = datetime.datetime.now() + datetime.timedelta(delta)
+        link = extrapolate_link(endDate)
+        resp, _ = load_page(link)
+
+        if resp.status == 200:
+            lastSaleEnd, lastSaleLink = endDate, link
+            break
+        else:
+            print link + "... " + (sWarning(resp.status))
+    else:
+        sys.exit(sWarning("Could not repair sale date data."))
+
     rotation = [tuple(str(num) for num in x) for x in
         [(975, 750, 520), (1350, 975, 520), (975, 750, 520), (975, 975, 520)]
     ]
@@ -360,11 +382,10 @@ def repair_lastrun():
         _, _, saleArray = get_content(link)
         return tuple(sale.regularPrice for sale in saleArray if sale.isSkin)
 
-    lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
-    lastRotation = get_rotation(extrapolate_link(lastSaleEnd))
+    lastRotation = get_rotation(lastSaleLink)
 
     if lastRotation == (975, 750, 520):
-        # Work two sales back to extrapolate rotation
+        print "Extrapolating two sales back for rotation."
         twoSaleEnd = lastSaleEnd - datetime.timedelta(3)
         twoLink = extrapolate_link(twoSaleEnd)
         resp, _ = load_page(twoLink)
@@ -379,22 +400,23 @@ def repair_lastrun():
             else:
                 sys.exit(sWarning("Could not determine rotation."))
 
-        twoRotationIndex = rotation.index(twoRotation)
-        lastRotationIndex = (twoRotationIndex + 1) % 4
+        lastRotationIndex = rotation.index(twoRotation) + 1
     else:
         lastRotationIndex = rotation.index(lastRotation)
 
-    update_lastrun(lastrun.lastSaleEnd, lastRotationIndex)
+    lastSaleEndText = datetime.datetime.strftime(lastSaleEnd, '%Y-%m-%d')
+
+    update_lastrun(lastSaleEndText, rotationIndex=lastRotationIndex)
     sys.exit()
 
 
 @click.command()
 @click.argument('testLink', required=False)
-@click.option('--delay', '-d', 'delay', default=0, help="Delay before running script.", metavar='<hours>')
-@click.option('--last', '-l', 'last', is_flag=True, help="Crawls most recent sale data.")
-@click.option('--manual', '-m', 'manual', is_flag=True, help="Manually create post.")
-@click.option('--refresh', '-r', 'refresh', is_flag=True, help="Automatically refresh sale pages.")
-@click.option('--verbose', '-v', 'verbose', is_flag=True, help="Output entire post body.")
+@click.option('--delay', '-d', default=0, help="Delay before running script.", metavar='<hours>')
+@click.option('--last', '-l', is_flag=True, help="Crawls most recent sale data.")
+@click.option('--manual', '-m', is_flag=True, help="Manually create post.")
+@click.option('--refresh', '-r', is_flag=True, help="Automatically refresh sale pages.")
+@click.option('--verbose', '-v', is_flag=True, help="Output entire post body.")
 @click.option('--repair', is_flag=True, help="Attemps to repair data in lastrun.py.")
 
 def main(testLink, delay, last, manual, refresh, verbose, repair):
@@ -434,7 +456,9 @@ def main(testLink, delay, last, manual, refresh, verbose, repair):
             sys.exit(sWarning("Did not post."))
         else:
             post_to_reddit(postTitle, postBody, saleLink)
-            update_lastrun()
+
+            saleEnd = (datetime.datetime.now() + datetime.timedelta(4))
+            update_lastrun(saleEnd.strftime('%Y-%m-%d'))
 
     sys.exit()
 
