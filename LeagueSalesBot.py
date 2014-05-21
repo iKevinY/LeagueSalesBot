@@ -37,10 +37,14 @@ def sSuccess(s): return '\033[32m' + str(s) + '\033[0m'
 def sWarning(s): return '\033[31m' + str(s) + '\033[0m'
 
 
-def load_page(link):
+def load_page(link, headerOnly=False, contentOnly=False):
     try:
-        resp, content = httplib2.Http().request(link)
-        return resp, content
+        if headerOnly:
+            return httplib2.Http().request(link, "HEAD")[0]
+        elif contentOnly:
+            return httplib2.Http().request(link)[1]
+        else:
+            return httplib2.Http().request(link)
     except httplib2.ServerNotFoundError:
         sys.exit(sWarning("Connection error."))
 
@@ -72,20 +76,21 @@ def format_resources(sale):
         ['[{0}]({1})'.format(text, link) for link, text in resources if link is not None])
 
 
-def get_content(testLink, delay=None, refresh=None, verbose=None):
+def get_sale_page(testLink, delay=None, refresh=None, verbose=None):
     """Loads appropriate content based on most recent sale or supplied test link"""
     if testLink:
         if not verbose:
             print testLink + "...",
+            sys.stdout.flush()
 
-        resp, content = load_page(testLink)
+        response = load_page(testLink, headerOnly=True)
 
-        if resp.status != 200:
-            print (sWarning(resp.status))
+        if response.status != 200:
+            print (sWarning(response.status))
             sys.exit(sWarning("Terminating script."))
         else:
             if not verbose:
-                print sSuccess(resp.status)
+                print sSuccess(response.status)
 
             try:
                 start, end = re.findall('.*(\d{4})-(\d{4})', testLink)[0]
@@ -141,13 +146,14 @@ def get_content(testLink, delay=None, refresh=None, verbose=None):
 
         while not saleLink:
             for link in links:
-                resp, content = load_page(link)
                 print link + "...\t",
+                sys.stdout.flush()
+                response = load_page(link, headerOnly=True)
 
-                if resp.status != 200:
-                    print sWarning(resp.status)
+                if response.status != 200:
+                    print sWarning(response.status)
                 else:
-                    print sSuccess(resp.status)
+                    print sSuccess(response.status)
                     saleLink = link
                     break
             else:
@@ -158,6 +164,11 @@ def get_content(testLink, delay=None, refresh=None, verbose=None):
                 else:
                     sys.exit(sWarning("Terminating script."))
 
+    return saleLink, dateRange
+
+
+def get_sales(saleLink):
+    """Parses sale page for sale data"""
     # Define regexes for sales, skin art, and champion info pages
     regexes = (
         '<h4>(?:<a .+?>)*\s*?(.+?)\s*?(?:<\/a>)*<\/h4>\s+?<strike.*?>(\d+?)<\/strike> (\d+?) RP',
@@ -165,7 +176,9 @@ def get_content(testLink, delay=None, refresh=None, verbose=None):
         '<a href="(http://gameinfo.(?:na|euw).leagueoflegends.com/en/game-info/champions/\S+?)"',
     )
 
-    saleList, skinList, infoList = (re.findall(regex, content) for regex in regexes)
+    pageContent = load_page(saleLink, contentOnly=True)
+
+    saleList, skinList, infoList = (re.findall(regex, pageContent) for regex in regexes)
 
     saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
 
@@ -191,9 +204,7 @@ def get_content(testLink, delay=None, refresh=None, verbose=None):
                 sale.infoPage = None
 
     # Sorts sale array by skins > champions and then by price (in reverse)
-    saleArray.sort(key=lambda sale: (sale.isSkin, sale.salePrice), reverse=True)
-
-    return saleLink, dateRange, saleArray
+    return sorted(saleArray, key=lambda sale: (sale.isSkin, sale.salePrice), reverse=True)
 
 
 def sale_output(sale):
@@ -244,36 +255,34 @@ def make_post(saleArray, saleLink):
     )
 
 
-def get_spotlight(sale, verbose):
+def get_spotlight(sale):
     """Finds appropriate champion or skin spotlight video for sale"""
-    if sale.isSkin:
-        channel, suffix = ('SkinSpotlights', '+Skin+Spotlight')
-    else:
-        channel, suffix = ('RiotGamesInc', '+Champion+Spotlight')
-
     searchTerm = sale.saleName.replace(' ', '+')
-    videoPage = 'https://www.youtube.com/user/{0}/search?query={1}'.format(channel, searchTerm, suffix)
-    resp, content = load_page(videoPage)
+
+    if sale.isSkin:
+        channel, searchTerm = ('SkinSpotlights', searchTerm + '+Skin+Spotlight')
+    else:
+        channel, searchTerm = ('RiotGamesInc', searchTerm + '+Champion+Spotlight')
+
+    videoPage = 'https://www.youtube.com/user/{0}/search?query={1}'.format(channel, searchTerm)
+    pageContent = load_page(videoPage, contentOnly=True)
 
     try:
         searchResult = '<h3 class="yt-lockup-title"><a.*?href="(\S*)">(.*)</a></h3>'
-        slug, spotlightName = re.findall(searchResult, content)[0]
-
-        # Handle cases where no spotlight exists (ie. Forecast Janna video for Janna Spotlight)
-        if "Spotlight" not in spotlightName:
-            spotlightURL = None
-        else:
-            spotlightURL = 'https://www.youtube.com' + slug
+        slug, spotlightName = re.findall(searchResult, pageContent)[0]
     except IndexError:
         spotlightURL = None
+
+    # Handle cases where no spotlight exists, ie. Janna (Forecast Janna is top result)
+    if "Spotlight" not in spotlightName:
+        spotlightURL = None
+    else:
+        spotlightURL = 'https://www.youtube.com' + slug
 
     if not spotlightURL:
         spotlightName = sWarning("No spotlight found.")
 
-    if not verbose:
-        print '{: <30}'.format(sale.saleName) + sale.salePrice + ' RP\t' + spotlightName
-
-    return spotlightURL
+    return spotlightURL, spotlightName
 
 
 def post_to_reddit(postTitle, postBody, saleLink):
@@ -318,6 +327,7 @@ def update_lastrun(saleEndText, rotationIndex=None):
     path = os.path.join(directory, 'lastrun.py')
 
     print sSuccess("Modified lastrun.py from ({0}, {1}) to".format(lastSaleEnd, lastRotation)),
+    sys.stdout.flush()
 
     with open(path, 'w+') as f:
         f.write('lastSaleEnd = "{0}"\nlastRotation = {1}\n'.format(saleEndText, rotationIndex))
@@ -368,46 +378,45 @@ def extrapolate_link(lastSaleEnd, region='na'):
 
 def repair_lastrun():
     """Called from the CLI to ensure correct data in lastrun.py"""
-    print "Looking for most recent sale page."
+    print "Finding most recent sale page."
 
     # Run through a week's worth of sale pages starting from datetime.now()
-    for delta in range(4, -3, -1):
-        endDate = datetime.datetime.now() + datetime.timedelta(delta)
+    for delta in range(-4, 3):
+        endDate = datetime.datetime.now() - datetime.timedelta(delta)
         link = extrapolate_link(endDate)
-        resp, _ = load_page(link)
 
-        if resp.status == 200:
+        print link + "... ",
+        sys.stdout.flush()
+        response = load_page(link, headerOnly=True)
+
+        if response.status == 200:
+            print sSuccess(response.status)
             lastSaleEnd, lastSaleLink = endDate, link
             break
         else:
-            print link + "... " + (sWarning(resp.status))
+            print sWarning(response.status)
     else:
         sys.exit(sWarning("Could not repair sale date data."))
 
+    def get_rotation(link):
+        return tuple(sale.regularPrice for sale in get_sales(link) if sale.isSkin)
+
     cycle = [(975, 750, 520), (1350, 975, 520), (975, 750, 520), (975, 975, 520)]
     rotation = [tuple(str(num) for num in x) for x in cycle]
-
-    def get_rotation(link):
-        _, _, saleArray = get_content(link)
-        return tuple(sale.regularPrice for sale in saleArray if sale.isSkin)
 
     lastRotation = get_rotation(lastSaleLink)
 
     if lastRotation == (975, 750, 520):
         print "Extrapolating two sales back for rotation."
-        twoSaleEnd = lastSaleEnd - datetime.timedelta(3)
-        twoLink = extrapolate_link(twoSaleEnd)
-        resp, _ = load_page(twoLink)
-        if resp.status == 200:
-            twoRotation = get_rotation(twoLink)
-        else:
-            twoSaleEnd = lastSaleEnd - datetime.timedelta(4)
+        for delta in (3, 4):
+            twoSaleEnd = lastSaleEnd - datetime.timedelta(delta)
             twoLink = extrapolate_link(twoSaleEnd)
-            resp, _ = load_page(twoLink)
-            if resp.status == 200:
+            response = load_page(twoLink, headerOnly=True)
+            if response.status == 200:
                 twoRotation = get_rotation(twoLink)
-            else:
-                sys.exit(sWarning("Could not determine rotation."))
+                break
+        else:
+            sys.exit(sWarning("Could not determine rotation."))
 
         lastRotationIndex = rotation.index(twoRotation) + 1
     else:
@@ -417,7 +426,7 @@ def repair_lastrun():
     update_lastrun(lastSaleEndText, rotationIndex=lastRotationIndex)
 
     nextRotation = rotation[(lastRotationIndex + 1) % 4]
-    print sSpecial("Next skin sale is {0} RP, {1} RP, {2} RP.".format(*nextRotation))
+    print "Next skin sale is {0} RP, {1} RP, {2} RP.".format(*nextRotation)
     sys.exit(sSuccess("lastrun.py repaired successfully."))
 
 
@@ -439,14 +448,15 @@ def main(testLink, delay, last, manual, refresh, verbose, repair):
     if repair:
         repair_lastrun()
     elif manual:
-        saleLink, dateRange, saleArray = manual_post()
+        saleLink, dateRange = manual_post()
     else:
         if last:
             lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
             testLink = extrapolate_link(lastSaleEnd)
 
-        saleLink, dateRange, saleArray = get_content(testLink, delay, refresh, verbose)
+        saleLink, dateRange = get_sale_page(testLink, delay, refresh, verbose)
 
+    saleArray = get_sales(saleLink)
     skinSales = ', '.join(sale.saleName for sale in saleArray if sale.isSkin)
     postTitle = '[Champion & Skin Sale] {0} ({1})'.format(skinSales, dateRange)
 
@@ -455,7 +465,9 @@ def main(testLink, delay, last, manual, refresh, verbose, repair):
 
     # Get spotlights and print to terminal
     for sale in saleArray:
-        sale.spotlight = get_spotlight(sale, verbose)
+        sale.spotlight, sale.spotlightName = get_spotlight(sale)
+        if not verbose:
+            print '{: <30}{} RP\t{}'.format(sale.saleName, sale.salePrice, sale.spotlightName)
 
     # Format post body and print appropriately depending on verbosity
     postBody = make_post(saleArray, saleLink)
@@ -467,9 +479,7 @@ def main(testLink, delay, last, manual, refresh, verbose, repair):
             sys.exit(sWarning("Did not post."))
         else:
             post_to_reddit(postTitle, postBody, saleLink)
-
-            saleEnd = (datetime.datetime.now() + datetime.timedelta(4))
-            update_lastrun(saleEnd.strftime('%Y-%m-%d'))
+            update_lastrun((datetime.datetime.now() + datetime.timedelta(4)).strftime('%Y-%m-%d'))
 
     sys.exit()
 
