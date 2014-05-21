@@ -37,10 +37,19 @@ def sSuccess(s): return '\033[32m' + str(s) + '\033[0m'
 def sWarning(s): return '\033[31m' + str(s) + '\033[0m'
 
 
-def load_page(link, headerOnly=False, contentOnly=False):
+def load_page(link, verbose=False, responseStatus=False, contentOnly=False):
     try:
-        if headerOnly:
-            return httplib2.Http().request(link, "HEAD")[0]
+        if responseStatus:
+            if not verbose:
+                print link + "...\t",
+                sys.stdout.flush()
+            response = httplib2.Http().request(link, "HEAD")[0]
+            if (response.status == 200) and not verbose:
+                print sSuccess(response.status)
+            else:
+                if not verbose:
+                    print sWarning(response.status)
+            return response.status
         elif contentOnly:
             return httplib2.Http().request(link)[1]
         else:
@@ -76,22 +85,12 @@ def format_resources(sale):
         ['[{0}]({1})'.format(text, link) for link, text in resources if link is not None])
 
 
-def get_sale_page(testLink, delay=None, refresh=None, verbose=None):
+def get_sale_page(testLink, delay=None, refresh=None, verbose=False):
     """Loads appropriate content based on most recent sale or supplied test link"""
     if testLink:
-        if not verbose:
-            print testLink + "...",
-            sys.stdout.flush()
-
-        response = load_page(testLink, headerOnly=True)
-
-        if response.status != 200:
-            print (sWarning(response.status))
+        if load_page(testLink, verbose, responseStatus=True) != 200:
             sys.exit(sWarning("Terminating script."))
         else:
-            if not verbose:
-                print sSuccess(response.status)
-
             try:
                 start, end = re.findall('.*(\d{4})-(\d{4})', testLink)[0]
             except IndexError:
@@ -128,11 +127,11 @@ def get_sale_page(testLink, delay=None, refresh=None, verbose=None):
 
         regions = ('na', 'euw')
         dateFormats = ('%m%d', '%d%m')
-        linkPerms = ((region, saleStart.strftime(format), saleEnd.strftime(format))
+        linkPermutations = ((region, saleStart.strftime(format), saleEnd.strftime(format))
             for region in regions for format in dateFormats)
 
         baseLink = 'http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}'
-        links = [baseLink.format(*perm) for perm in linkPerms]
+        links = [baseLink.format(*permutation) for permutation in linkPermutations]
 
         print "Last sale ended on {0}. Requesting {1} sale pages.".format(
             sSpecial(lastSaleEnd.strftime("%B %-d")), sSpecial(dateRange))
@@ -146,14 +145,7 @@ def get_sale_page(testLink, delay=None, refresh=None, verbose=None):
 
         while not saleLink:
             for link in links:
-                print link + "...\t",
-                sys.stdout.flush()
-                response = load_page(link, headerOnly=True)
-
-                if response.status != 200:
-                    print sWarning(response.status)
-                else:
-                    print sSuccess(response.status)
+                if load_page(link, verbose, responseStatus=True) == 200:
                     saleLink = link
                     break
             else:
@@ -378,23 +370,15 @@ def extrapolate_link(lastSaleEnd, region='na'):
 
 def repair_lastrun():
     """Called from the CLI to ensure correct data in lastrun.py"""
-    print "Finding most recent sale page."
-
     # Run through a week's worth of sale pages starting from datetime.now()
+    print "Finding most recent sale page."
     for delta in range(-4, 3):
         endDate = datetime.datetime.now() - datetime.timedelta(delta)
         link = extrapolate_link(endDate)
 
-        print link + "... ",
-        sys.stdout.flush()
-        response = load_page(link, headerOnly=True)
-
-        if response.status == 200:
-            print sSuccess(response.status)
+        if load_page(link, verbose=True, responseStatus=True) == 200:
             lastSaleEnd, lastSaleLink = endDate, link
             break
-        else:
-            print sWarning(response.status)
     else:
         sys.exit(sWarning("Could not repair sale date data."))
 
@@ -411,17 +395,15 @@ def repair_lastrun():
         for delta in (3, 4):
             twoSaleEnd = lastSaleEnd - datetime.timedelta(delta)
             twoLink = extrapolate_link(twoSaleEnd)
-            response = load_page(twoLink, headerOnly=True)
-            if response.status == 200:
+            if response.load_page(twoLink, verbose=True, responseStatus=True) == 200:
                 twoRotation = get_rotation(twoLink)
                 break
         else:
             sys.exit(sWarning("Could not determine rotation."))
 
-        lastRotationIndex = rotation.index(twoRotation) + 1
-    else:
-        lastRotationIndex = rotation.index(lastRotation)
+        lastRotation = (twoRotation + 1) % 4
 
+    lastRotationIndex = rotation.index(lastRotation)
     lastSaleEndText = datetime.datetime.strftime(lastSaleEnd, '%Y-%m-%d')
     update_lastrun(lastSaleEndText, rotationIndex=lastRotationIndex)
 
