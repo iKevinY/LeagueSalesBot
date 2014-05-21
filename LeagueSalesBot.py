@@ -50,8 +50,6 @@ def load_page(link, verbose=False, responseStatus=False, contentOnly=False):
                 if not verbose:
                     print sWarning(response.status)
             return response.status
-        elif contentOnly:
-            return httplib2.Http().request(link)[1]
         else:
             return httplib2.Http().request(link)
     except httplib2.ServerNotFoundError:
@@ -151,7 +149,7 @@ def get_sale_page(testLink, delay=None, refresh=None, verbose=False):
             else:
                 if refresh:
                     refreshDelay = 15
-                    print "Reloading every {0} seconds (c-C to force quit)...".format(refreshDelay)
+                    print "Reloading in {0} seconds (c-C to force quit)...".format(refreshDelay)
                     time.sleep(refreshDelay)
                 else:
                     sys.exit(sWarning("Terminating script."))
@@ -168,7 +166,7 @@ def get_sales(saleLink):
         '<a href="(http://gameinfo.(?:na|euw).leagueoflegends.com/en/game-info/champions/\S+?)"',
     )
 
-    pageContent = load_page(saleLink, contentOnly=True)
+    pageContent = load_page(saleLink)[1]
 
     saleList, skinList, infoList = (re.findall(regex, pageContent) for regex in regexes)
 
@@ -216,10 +214,8 @@ def sale_output(sale):
     else:
         sale.champName = sale.saleName
 
-    sale.wikiLink = 'http://leagueoflegends.wikia.com/wiki/' + sale.champName.replace(' ', '_')
-
-    # Remove spaces, periods, and apostrophes from champion name to generate icon string
     sale.icon = '[](/{0})'.format(re.sub('\ |\.|\'', '', sale.champName.lower()))
+    sale.wikiLink = 'http://leagueoflegends.wikia.com/wiki/' + sale.champName.replace(' ', '_')
 
     return '|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}|'.format(
         sale.icon, sale.saleName, sale.wikiLink, sale.salePrice,
@@ -257,7 +253,7 @@ def get_spotlight(sale):
         channel, searchTerm = ('RiotGamesInc', searchTerm + '+Champion+Spotlight')
 
     videoPage = 'https://www.youtube.com/user/{0}/search?query={1}'.format(channel, searchTerm)
-    pageContent = load_page(videoPage, contentOnly=True)
+    pageContent = load_page(videoPage)[1]
 
     try:
         searchResult = '<h3 class="yt-lockup-title"><a.*?href="(\S*)">(.*)</a></h3>'
@@ -271,7 +267,7 @@ def get_spotlight(sale):
     else:
         spotlightURL = 'https://www.youtube.com' + slug
 
-    if not spotlightURL:
+    if spotlightURL is None:
         spotlightName = sWarning("No spotlight found.")
 
     return spotlightURL, spotlightName
@@ -395,7 +391,7 @@ def repair_lastrun():
         for delta in (3, 4):
             twoSaleEnd = lastSaleEnd - datetime.timedelta(delta)
             twoLink = extrapolate_link(twoSaleEnd)
-            if response.load_page(twoLink, verbose=True, responseStatus=True) == 200:
+            if load_page(twoLink, verbose=True, responseStatus=True) == 200:
                 twoRotation = get_rotation(twoLink)
                 break
         else:
