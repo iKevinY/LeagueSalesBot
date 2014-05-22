@@ -37,18 +37,19 @@ def sSuccess(s): return '\033[32m' + str(s) + '\033[0m'
 def sWarning(s): return '\033[31m' + str(s) + '\033[0m'
 
 
-def load_page(link, verbose=False, responseStatus=False, contentOnly=False):
+def load_page(link, verbose=False, responseStatus=False):
     try:
         if responseStatus:
             if not verbose:
                 print link + "...\t",
                 sys.stdout.flush()
             response = httplib2.Http().request(link, "HEAD")[0]
-            if (response.status == 200) and not verbose:
-                print sSuccess(response.status)
-            else:
-                if not verbose:
+            if not verbose:
+                if (response.status == 200):
+                    print sSuccess(response.status)
+                else:
                     print sWarning(response.status)
+
             return response.status
         else:
             return httplib2.Http().request(link)
@@ -83,14 +84,14 @@ def format_resources(sale):
         ['[{0}]({1})'.format(text, link) for link, text in resources if link is not None])
 
 
-def get_sale_page(testLink, delay=None, refresh=None, verbose=False):
+def get_sale_page(testlink=None, delay=None, refresh=None, verbose=False):
     """Loads appropriate content based on most recent sale or supplied test link"""
-    if testLink:
-        if load_page(testLink, verbose, responseStatus=True) != 200:
+    if testlink:
+        if load_page(testlink, verbose, responseStatus=True) != 200:
             sys.exit(sWarning("Terminating script."))
         else:
             try:
-                start, end = re.findall('.*(\d{4})-(\d{4})', testLink)[0]
+                start, end = re.findall('.*(\d{4})-(\d{4})', testlink)[0]
             except IndexError:
                 sys.exit(sWarning("Invalid sale page URL."))
 
@@ -101,19 +102,15 @@ def get_sale_page(testLink, delay=None, refresh=None, verbose=False):
                     dateRange = format_range(saleStart, saleEnd)
                     break
                 except ValueError:
+                    # Pass to try other date formats; for loop will catch the exception
                     pass
             else:
                 sys.exit(sWarning("Date range could not be determined from sale URL."))
 
-            saleLink = testLink
-
+            saleLink = testlink
     else:
-        """
-        If lastrun.rotation is an even value, the last sale was posted on a Thursday
-        so the next sale will start a day after the end date of the previous sale.
-        Otherwise, the next sale will start on the same day that the last sale ended on.
-        """
         try:
+            # Uses lastRotation value to differentiate between Mon/Thurs sale date deltas
             lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
             saleStart = lastSaleEnd + datetime.timedelta((lastrun.lastRotation + 1) % 2)
             saleEnd = saleStart + datetime.timedelta(3) # Four-day sales
@@ -128,8 +125,7 @@ def get_sale_page(testLink, delay=None, refresh=None, verbose=False):
         linkPermutations = ((region, saleStart.strftime(format), saleEnd.strftime(format))
             for region in regions for format in dateFormats)
 
-        baseLink = 'http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}'
-        links = [baseLink.format(*permutation) for permutation in linkPermutations]
+        links = [settings.baseLink.format(*permutation) for permutation in linkPermutations]
 
         print "Last sale ended on {0}. Requesting {1} sale pages.".format(
             sSpecial(lastSaleEnd.strftime("%B %-d")), sSpecial(dateRange))
@@ -307,7 +303,7 @@ def update_lastrun(saleEndText, rotationIndex=None):
 
     if not rotationIndex:
         try:
-            rotationIndex = (lastrun.lastRotation + 1) % 4
+            rotationIndex = (lastRotation + 1) % 4
         except AttributeError:
             pass
 
@@ -334,8 +330,7 @@ def manual_post():
     dateRange = format_range(saleStart, saleEnd)
 
     dateFormat = tuple(datetime.datetime.strftime(date, '%m%d') for date in (saleStart, saleEnd))
-    baseLink = 'http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}'
-    saleLink = (baseLink.format('na', dateFormat[0], dateFormat[1]))
+    saleLink = (settings.baseLink.format('na', dateFormat[0], dateFormat[1]))
 
     for i, sale in enumerate(saleArray):
         print "\nSkin #{}".format(i + 1) if sale.isSkin else "\nChampion #{}".format(i - 2)
@@ -355,9 +350,8 @@ def manual_post():
 
 def extrapolate_link(lastSaleEnd, region='na'):
     """Used to extrapolate sale link from end sale date"""
-    baseLink = 'http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}'
     lastSaleStart = lastSaleEnd - datetime.timedelta(3)
-    return baseLink.format(
+    return settings.baseLink.format(
         region,
         datetime.datetime.strftime(lastSaleStart, '%m%d'),
         datetime.datetime.strftime(lastSaleEnd, '%m%d')
@@ -403,13 +397,12 @@ def repair_lastrun():
     lastSaleEndText = datetime.datetime.strftime(lastSaleEnd, '%Y-%m-%d')
     update_lastrun(lastSaleEndText, rotationIndex=lastRotationIndex)
 
-    nextRotation = rotation[(lastRotationIndex + 1) % 4]
-    print "Next skin sale is {0} RP, {1} RP, {2} RP.".format(*nextRotation)
-    sys.exit(sSuccess("lastrun.py repaired successfully."))
+    sys.exit(sSuccess("lastrun.py repaired successfully. (Next sale: {0}, {1}, {2} RP)").format(
+        *rotation[(lastRotationIndex + 1) % 4]))
 
 
 @click.command()
-@click.argument('testLink', required=False)
+@click.argument('testlink', required=False)
 @click.option('--delay', '-d', default=0.0, help="Delay before running script.", metavar='<hours>')
 @click.option('--last', '-l', is_flag=True, help="Crawls most recent sale data.")
 @click.option('--manual', '-m', is_flag=True, help="Manually create post.")
@@ -417,7 +410,7 @@ def repair_lastrun():
 @click.option('--verbose', '-v', is_flag=True, help="Output entire post body.")
 @click.option('--repair', is_flag=True, help="Attemps to repair data in lastrun.py.")
 
-def main(testLink, delay, last, manual, refresh, verbose, repair):
+def main(testlink, delay, last, manual, refresh, verbose, repair):
     """
     Python script that generates Reddit post summarizing the biweekly League
     of Legends champion and skin sales. Uses the httplib2 and PRAW libraries.
@@ -430,9 +423,9 @@ def main(testLink, delay, last, manual, refresh, verbose, repair):
     else:
         if last:
             lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
-            testLink = extrapolate_link(lastSaleEnd)
+            testlink = extrapolate_link(lastSaleEnd)
 
-        saleLink, dateRange = get_sale_page(testLink, delay, refresh, verbose)
+        saleLink, dateRange = get_sale_page(testlink, delay, refresh, verbose)
 
     saleArray = get_sales(saleLink)
     skinSales = ', '.join(sale.saleName for sale in saleArray if sale.isSkin)
@@ -452,12 +445,13 @@ def main(testLink, delay, last, manual, refresh, verbose, repair):
     print postBody if verbose else sSuccess("Post formatted successfully.")
 
     # Post to Reddit and update lastrun.py with correct information
-    if not testLink:
+    if not testlink:
         if manual and not click.confirm("Post to Reddit?"):
             sys.exit(sWarning("Did not post."))
         else:
             post_to_reddit(postTitle, postBody, saleLink)
-            update_lastrun((datetime.datetime.now() + datetime.timedelta(4)).strftime('%Y-%m-%d'))
+            endOfSale = (datetime.datetime.now() + datetime.timedelta(4)).strftime('%Y-%m-%d')
+            update_lastrun(endOfSale)
 
     sys.exit()
 
