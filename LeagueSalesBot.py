@@ -14,7 +14,7 @@ import click
 import settings
 import lastrun
 
-"""Create classes for sale types (skins and champions)"""
+
 class Sale():
     saleName = ''
     salePrice = ''
@@ -144,7 +144,7 @@ def get_sale_page(testlink=None, delay=None, refresh=None, verbose=False):
                     break
             else:
                 if refresh:
-                    refreshDelay = 15
+                    refreshDelay = 20
                     print "Reloading in {0} seconds (c-C to force quit)...".format(refreshDelay)
                     time.sleep(refreshDelay)
                 else:
@@ -254,14 +254,14 @@ def get_spotlight(sale):
     try:
         searchResult = '<h3 class="yt-lockup-title"><a.*?href="(\S*)">(.*)</a></h3>'
         slug, spotlightName = re.findall(searchResult, pageContent)[0]
+        spotlightURL = 'https://www.youtube.com' + slug
     except IndexError:
         spotlightURL = None
 
     # Handle cases where no spotlight exists, ie. Janna (Forecast Janna is top result)
-    if "Spotlight" not in spotlightName:
-        spotlightURL = None
-    else:
-        spotlightURL = 'https://www.youtube.com' + slug
+    if not sale.isSkin:
+        if ("Spotlight" not in spotlightName) or (sale.saleName not in spotlightName):
+            spotlightURL = None
 
     if spotlightURL is None:
         spotlightName = sWarning("No spotlight found.")
@@ -301,7 +301,7 @@ def update_lastrun(saleEndText, rotationIndex=None):
     except AttributeError:
         lastSaleEnd, lastRotation = None, None
 
-    if not rotationIndex:
+    if rotationIndex is None:
         try:
             rotationIndex = (lastRotation + 1) % 4
         except AttributeError:
@@ -380,7 +380,7 @@ def repair_lastrun():
 
     lastRotation = get_rotation(lastSaleLink)
 
-    if lastRotation == (975, 750, 520):
+    if lastRotation == ('975', '750', '520'):
         print "Extrapolating two sales back for rotation."
         for delta in (3, 4):
             twoSaleEnd = lastSaleEnd - datetime.timedelta(delta)
@@ -391,13 +391,14 @@ def repair_lastrun():
         else:
             sys.exit(sWarning("Could not determine rotation."))
 
-        lastRotation = (twoRotation + 1) % 4
+        lastRotationIndex = (rotation.index(twoRotation) + 1) % 4
+    else:
+        lastRotationIndex = rotation.index(lastRotation)
 
-    lastRotationIndex = rotation.index(lastRotation)
     lastSaleEndText = datetime.datetime.strftime(lastSaleEnd, '%Y-%m-%d')
     update_lastrun(lastSaleEndText, rotationIndex=lastRotationIndex)
 
-    sys.exit(sSuccess("lastrun.py repaired successfully. (Next sale: {0}, {1}, {2} RP)").format(
+    sys.exit(sSuccess("lastrun.py repaired successfully. (Upcoming sale: {0}, {1}, {2} RP)").format(
         *rotation[(lastRotationIndex + 1) % 4]))
 
 
