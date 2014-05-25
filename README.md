@@ -12,32 +12,20 @@ lastSaleEnd = "2013-08-12"
 lastRotation = 3
 ```
 
-`settings.py` contains information like the username and password of the bot, the user agent used, the subreddit the bot is posting to, and also what page the bot should search in order to check for a new sale. In addition, this file stores information about two-part champion names, exception skins, and the FAQ content.
+`settings.py` contains information like the username and password of the bot, the user agent used, the subreddit the bot is posting to, the format of the sale page, and the FAQ.
 
 ```python
 username = "LeagueSalesBot"
 password = ""
 userAgent = ""
 
+baseLink = 'http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}'
+
 subreddits = (
     (subreddit, isLinkPost),
     ...
 )
 
-# Dictionary containing regexes for champions with two-part names
-twoParts = {
-    ".*? Lee Sin": "Lee Sin",
-    ".*? Mundo": "Dr. Mundo"
-    ...
-}
-
-# Dictionary containing skins not in format "[skin name] [champion name]"
-exceptSkins = {
-    "AstroNautilus": "Nautilus"
-    ...
-}
-
-# Contains question and answer tuples for FAQ
 faqArray = (
     (question, answer),
     ...

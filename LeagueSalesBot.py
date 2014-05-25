@@ -11,8 +11,9 @@ import httplib2
 import praw
 import click
 
-import settings
 import lastrun
+import settings
+import skins
 
 
 class Sale(object):
@@ -191,14 +192,14 @@ def sale_output(sale):
     """Generates row of sale table for sale item"""
     if sale.isSkin:
         # Champions with two-part names
-        for regex, champion in settings.twoParts.iteritems():
+        for regex, champion in skins.twoParts.iteritems():
             if re.match(regex, sale.saleName):
                 sale.champName = champion
                 break
         else:
             # Try all exception skins
-            if sale.saleName in settings.exceptSkins:
-                sale.champName = settings.exceptSkins[sale.saleName]
+            if sale.saleName in skins.exceptSkins:
+                sale.champName = skins.exceptSkins[sale.saleName]
             else:
                 sale.champName = sale.saleName.split()[-1]
     else:
