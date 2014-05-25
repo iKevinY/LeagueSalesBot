@@ -17,13 +17,19 @@ import skins
 
 
 class Sale(object):
-    pass
+    saleName = ''
+    salePrice = ''
+    regularPrice = ''
+    spotlight = None
 
 class Skin(Sale):
     isSkin = True
+    splashArt = None
+    inGameArt = None
 
 class Champ(Sale):
     isSkin = False
+    infoPage = None
 
 
 """Define functions for printing ANSI-coloured terminal messages"""
@@ -150,6 +156,8 @@ def get_sale_page(testlink=None, delay=None, refresh=None, verbose=False):
 
 def get_sales(saleLink):
     """Parses sale page for sale data"""
+    saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
+
     # Define regexes for sales, skin art, and champion info pages
     regexes = (
         '<h4>(?:<a .+?>)*\s*?(.+?)\s*?(?:<\/a>)*<\/h4>\s+?<strike.*?>(\d+?)<\/strike> (\d+?) RP',
@@ -158,10 +166,7 @@ def get_sales(saleLink):
     )
 
     pageContent = load_page(saleLink)[1]
-
     saleList, skinList, infoList = (re.findall(regex, pageContent) for regex in regexes)
-
-    saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
 
     for i, sale in enumerate(saleArray):
         try:
@@ -206,10 +211,10 @@ def sale_output(sale):
         sale.champName = sale.saleName
 
     sale.icon = '[](/{0})'.format(re.sub('\ |\.|\'', '', sale.champName.lower()))
-    sale.wiki = 'http://leagueoflegends.wikia.com/wiki/' + sale.champName.replace(' ', '_')
+    sale.wikiLink = 'http://leagueoflegends.wikia.com/wiki/' + sale.champName.replace(' ', '_')
     sale.resources = format_resources(sale)
 
-    return ('|{icon}|**[{saleName}]({wiki})**|'
+    return ('|{icon}|**[{saleName}]({wikiLink})**|'
             '{salePrice} RP|~~{regularPrice} RP~~|{resources}|'.format(**sale.__dict__))
 
 
@@ -356,7 +361,7 @@ def extrapolate_link(lastSaleEnd, region='na'):
 def repair_lastrun():
     """Called from the CLI to ensure correct data in lastrun.py"""
     # Run through five possible sale pages starting from datetime.now()
-    print "Finding most recent sale page."
+    print "Determining most recent sale page."
     for delta in range(-4, 1):
         endDate = datetime.datetime.now() - datetime.timedelta(delta)
         link = extrapolate_link(endDate)
