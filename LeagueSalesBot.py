@@ -15,20 +15,14 @@ import settings
 import lastrun
 
 
-class Sale():
-    saleName = ''
-    salePrice = ''
-    regularPrice = ''
-    spotlight = None
+class Sale(object):
+    pass
 
 class Skin(Sale):
     isSkin = True
-    splashArt = None
-    inGameArt = None
 
 class Champ(Sale):
     isSkin = False
-    infoPage = None
 
 
 """Define functions for printing ANSI-coloured terminal messages"""
@@ -110,7 +104,7 @@ def get_sale_page(testlink=None, delay=None, refresh=None, verbose=False):
             saleLink = testlink
     else:
         try:
-            # Uses lastRotation value to differentiate between Mon/Thurs sale date deltas
+            # Uses lastRotation value to differentiate between Mon/Thurs date deltas
             lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
             saleStart = lastSaleEnd + datetime.timedelta((lastrun.lastRotation + 1) % 2)
             saleEnd = saleStart + datetime.timedelta(3) # Four-day sales
@@ -211,11 +205,11 @@ def sale_output(sale):
         sale.champName = sale.saleName
 
     sale.icon = '[](/{0})'.format(re.sub('\ |\.|\'', '', sale.champName.lower()))
-    sale.wikiLink = 'http://leagueoflegends.wikia.com/wiki/' + sale.champName.replace(' ', '_')
+    sale.wiki = 'http://leagueoflegends.wikia.com/wiki/' + sale.champName.replace(' ', '_')
+    sale.resources = format_resources(sale)
 
-    return '|{0}|**[{1}]({2})**|{3} RP|~~{4} RP~~|{5}|'.format(
-        sale.icon, sale.saleName, sale.wikiLink, sale.salePrice,
-        sale.regularPrice, format_resources(sale))
+    return ('|{icon}|**[{saleName}]({wiki})**|'
+            '{salePrice} RP|~~{regularPrice} RP~~|{resources}|'.format(**sale.__dict__))
 
 
 def make_post(saleArray, saleLink):
@@ -241,12 +235,12 @@ def make_post(saleArray, saleLink):
 
 def get_spotlight(sale):
     """Finds appropriate champion or skin spotlight video for sale"""
-    searchTerm = sale.saleName.replace(' ', '+')
+    saleSearch = sale.saleName.replace(' ', '+')
 
     if sale.isSkin:
-        channel, searchTerm = ('SkinSpotlights', searchTerm + '+Skin+Spotlight')
+        channel, searchTerm = ('SkinSpotlights', saleSearch + '+Skin+Spotlight')
     else:
-        channel, searchTerm = ('RiotGamesInc', searchTerm + '+Champion+Spotlight')
+        channel, searchTerm = ('RiotGamesInc', saleSearch + '+Champion+Spotlight')
 
     videoPage = 'https://www.youtube.com/user/{0}/search?query={1}'.format(channel, searchTerm)
     pageContent = load_page(videoPage)[1]
@@ -254,17 +248,17 @@ def get_spotlight(sale):
     try:
         searchResult = '<h3 class="yt-lockup-title"><a.*?href="(\S*)">(.*)</a></h3>'
         slug, spotlightName = re.findall(searchResult, pageContent)[0]
+        spotlightName = spotlightName.replace('&#39;', "'")
         spotlightURL = 'https://www.youtube.com' + slug
     except IndexError:
         spotlightURL = None
+        spotlightName = "No spotlight found (parsing error)."
 
     # Handle cases where no spotlight exists, ie. Janna (Forecast Janna is top result)
     if not sale.isSkin:
         if ("Spotlight" not in spotlightName) or (sale.saleName not in spotlightName):
             spotlightURL = None
-
-    if spotlightURL is None:
-        spotlightName = sWarning("No spotlight found.")
+            spotlightName = sWarning(spotlightName)
 
     return spotlightURL, spotlightName
 
@@ -360,13 +354,13 @@ def extrapolate_link(lastSaleEnd, region='na'):
 
 def repair_lastrun():
     """Called from the CLI to ensure correct data in lastrun.py"""
-    # Run through a week's worth of sale pages starting from datetime.now()
+    # Run through five possible sale pages starting from datetime.now()
     print "Finding most recent sale page."
-    for delta in range(-4, 3):
+    for delta in range(-4, 1):
         endDate = datetime.datetime.now() - datetime.timedelta(delta)
         link = extrapolate_link(endDate)
 
-        if load_page(link, verbose=True, responseStatus=True) == 200:
+        if load_page(link, responseStatus=True) == 200:
             lastSaleEnd, lastSaleLink = endDate, link
             break
     else:
@@ -385,7 +379,7 @@ def repair_lastrun():
         for delta in (3, 4):
             twoSaleEnd = lastSaleEnd - datetime.timedelta(delta)
             twoLink = extrapolate_link(twoSaleEnd)
-            if load_page(twoLink, verbose=True, responseStatus=True) == 200:
+            if load_page(twoLink, responseStatus=True) == 200:
                 twoRotation = get_rotation(twoLink)
                 break
         else:
@@ -398,7 +392,7 @@ def repair_lastrun():
     lastSaleEndText = datetime.datetime.strftime(lastSaleEnd, '%Y-%m-%d')
     update_lastrun(lastSaleEndText, rotationIndex=lastRotationIndex)
 
-    sys.exit(sSuccess("lastrun.py repaired successfully. (Upcoming sale: {0}, {1}, {2} RP)").format(
+    sys.exit(sSuccess("lastrun.py repaired successfully. Upcoming sale: {0}, {1}, {2} RP").format(
         *rotation[(lastRotationIndex + 1) % 4]))
 
 
@@ -429,8 +423,10 @@ def main(testlink, delay, last, manual, refresh, verbose, repair):
         saleLink, dateRange = get_sale_page(testlink, delay, refresh, verbose)
 
     saleArray = get_sales(saleLink)
-    skinSales = ', '.join(sale.saleName for sale in saleArray if sale.isSkin)
-    postTitle = '[Champion & Skin Sale] {0} ({1})'.format(skinSales, dateRange)
+
+    postTitle = '[Champion & Skin Sale] {0} ({1})'.format(
+        ', '.join(sale.saleName for sale in saleArray if sale.isSkin), dateRange
+    )
 
     if not verbose:
         print sSpecial(postTitle)
@@ -439,7 +435,7 @@ def main(testlink, delay, last, manual, refresh, verbose, repair):
     for sale in saleArray:
         sale.spotlight, sale.spotlightName = get_spotlight(sale)
         if not verbose:
-            print '{: <30}{} RP\t{}'.format(sale.saleName, sale.salePrice, sale.spotlightName)
+            print '{saleName: <30}{salePrice} RP\t{spotlightName}'.format(**sale.__dict__)
 
     # Format post body and print appropriately depending on verbosity
     postBody = make_post(saleArray, saleLink)
