@@ -15,7 +15,6 @@ import lastrun
 import settings
 import skins
 
-
 class Sale(object):
     saleName = ''
     salePrice = ''
@@ -33,9 +32,9 @@ class Champ(Sale):
 
 
 """Define functions for printing ANSI-coloured terminal messages"""
-def sSpecial(s): return '\033[1;36m' + str(s) + '\033[0m'
-def sSuccess(s): return '\033[32m' + str(s) + '\033[0m'
-def sWarning(s): return '\033[31m' + str(s) + '\033[0m'
+def sSpecial(s): return click.style(str(s), fg='cyan', bold=True)
+def sSuccess(s): return click.style(str(s), fg='green')
+def sWarning(s): return click.style(str(s), fg='red')
 
 
 def load_page(link, verbose=False, responseStatus=False):
@@ -271,16 +270,23 @@ def get_spotlight(sale):
 
 def post_to_reddit(postTitle, postBody, saleLink):
     """Posts self or link posts to subreddits as defined in settings.py"""
+    # Handle Reddit's automatic rate limiting
+    def handle_rate_limit(func, *args, **kwargs):
+        while True:
+            try:
+                return func(*args, **kwargs)
+            except praw.errors.RateLimitExceeded as error:
+                print 'Rate limit exceeded. Sleeping for {0} seconds'.format(error.sleep_time)
+                time.sleep(error.sleep_time)
+
     r = praw.Reddit(user_agent=settings.userAgent)
     r.login(settings.username, settings.password)
-    rateDelay = 10
 
     for subreddit, isLinkPost in settings.subreddits:
         if isLinkPost:
-            submission = r.submit(subreddit, postTitle, url=saleLink)
-            time.sleep(rateDelay)
+            submission = handle_rate_limit(r.submit, subreddit, postTitle, url=saleLink)
         else:
-            submission = r.submit(subreddit, postTitle, text=postBody)
+            submission = handle_rate_limit(r.submit, subreddit, postTitle, text=postBody)
 
         print sSuccess("Submitted {0} post at {1}/".format(
             "link" if isLinkPost else "self",
@@ -288,10 +294,8 @@ def post_to_reddit(postTitle, postBody, saleLink):
         )
 
         if isLinkPost:
-            submission.add_comment(postBody)
+            handle_rate_limit(submission.add_comment, postBody)
             print sSuccess("Commented on link post at /r/{0}.".format(subreddit))
-
-        time.sleep(rateDelay)
 
 
 def update_lastrun(saleEndText, rotationIndex=None):
@@ -402,8 +406,9 @@ def repair_lastrun():
         *rotation[(lastRotationIndex + 1) % 4]))
 
 
-@click.command()
+@click.command(add_help_option=False)
 @click.argument('testlink', required=False)
+@click.help_option('-h', '--help')
 @click.option('--delay', '-d', default=0.0, help="Delay before running script.", metavar='<hours>')
 @click.option('--last', '-l', is_flag=True, help="Crawls most recent sale data.")
 @click.option('--manual', '-m', is_flag=True, help="Manually create post.")
