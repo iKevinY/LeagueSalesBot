@@ -19,6 +19,7 @@ username = "LeagueSalesBot"
 password = ""
 userAgent = ""
 
+baseTitle = '[Champion & Skin Sale] {0} ({1})'
 baseLink = 'http://{0}.leagueoflegends.com/en/news/store/sales/champion-and-skin-sale-{1}-{2}'
 
 subreddits = (

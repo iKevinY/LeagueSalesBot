@@ -84,14 +84,14 @@ def format_resources(sale):
         ['[{0}]({1})'.format(text, link) for link, text in resources if link is not None])
 
 
-def get_sale_page(testlink=None, delay=None, refresh=None, verbose=False):
+def get_sale_page(link, delay, refresh, verbose):
     """Loads appropriate content based on most recent sale or supplied test link"""
-    if testlink:
-        if load_page(testlink, verbose, responseStatus=True) != 200:
+    if link:
+        if load_page(link, verbose, responseStatus=True) != 200:
             sys.exit(sWarning("Terminating script."))
         else:
             try:
-                start, end = re.findall('.*(\d{4})-(\d{4})', testlink)[0]
+                start, end = re.findall('.*(\d{4})-(\d{4})', link)[0]
             except IndexError:
                 sys.exit(sWarning("Invalid sale page URL."))
 
@@ -107,7 +107,7 @@ def get_sale_page(testlink=None, delay=None, refresh=None, verbose=False):
             else:
                 sys.exit(sWarning("Date range could not be determined from sale URL."))
 
-            saleLink = testlink
+            saleLink = link
     else:
         try:
             # Uses lastRotation value to differentiate between Mon/Thurs date deltas
@@ -132,7 +132,7 @@ def get_sale_page(testlink=None, delay=None, refresh=None, verbose=False):
 
         if delay:
             delay = int(delay) if delay.is_integer() else delay
-            print "Sleeping for {0} hour{1}.".format(delay, "s" * (delay != 1))
+            print "Sleeping for {0} {1}.".format(delay, "hour" if delay == 1 else "hours")
             time.sleep(delay * 60 * 60)
 
         saleLink = None
@@ -182,8 +182,7 @@ def get_sales(saleLink):
                 sale.splashArt, sale.inGameArt = None, None
         else:
             try:
-                # Force NA champion info page
-                sale.infoPage = infoList[(i - 3) * 2].replace('.euw.', '.na.')
+                sale.infoPage = infoList[(i - 3) * 2]
             except IndexError:
                 sWarning("Info page for " + sale.saleName + " not parsed.")
                 sale.infoPage = None
@@ -407,8 +406,8 @@ def repair_lastrun():
 
 
 @click.command(add_help_option=False)
-@click.argument('testlink', required=False)
 @click.help_option('-h', '--help')
+@click.argument('link', required=False)
 @click.option('--delay', '-d', default=0.0, help="Delay before running script.", metavar='<hours>')
 @click.option('--last', '-l', is_flag=True, help="Crawls most recent sale data.")
 @click.option('--manual', '-m', is_flag=True, help="Manually create post.")
@@ -416,7 +415,7 @@ def repair_lastrun():
 @click.option('--verbose', '-v', is_flag=True, help="Output entire post body.")
 @click.option('--repair', is_flag=True, help="Attemps to repair data in lastrun.py.")
 
-def main(testlink, delay, last, manual, refresh, verbose, repair):
+def main(link, delay, last, manual, refresh, verbose, repair):
     """
     Python script that generates Reddit post summarizing the biweekly League
     of Legends champion and skin sales. Uses the httplib2 and PRAW libraries.
@@ -429,13 +428,13 @@ def main(testlink, delay, last, manual, refresh, verbose, repair):
     else:
         if last:
             lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
-            testlink = extrapolate_link(lastSaleEnd)
+            link = extrapolate_link(lastSaleEnd)
 
-        saleLink, dateRange = get_sale_page(testlink, delay, refresh, verbose)
+        saleLink, dateRange = get_sale_page(link, delay, refresh, verbose)
 
     saleArray = get_sales(saleLink)
 
-    postTitle = '[Champion & Skin Sale] {0} ({1})'.format(
+    postTitle = settings.baseTitle.format(
         ', '.join(sale.saleName for sale in saleArray if sale.isSkin), dateRange
     )
 
@@ -452,8 +451,8 @@ def main(testlink, delay, last, manual, refresh, verbose, repair):
     postBody = make_post(saleArray, saleLink)
     print postBody if verbose else sSuccess("Post formatted successfully.")
 
-    # Post to Reddit and update lastrun.py with correct information
-    if not testlink:
+    # Post to Reddit and update lastrun.py with correct information if link was not supplied
+    if not link:
         if manual and not click.confirm("Post to Reddit?"):
             sys.exit(sWarning("Did not post."))
         else:
