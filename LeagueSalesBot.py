@@ -144,7 +144,7 @@ def get_sale_page(link, delay, refresh, verbose):
                     break
             else:
                 if refresh:
-                    refreshDelay = 20
+                    refreshDelay = 15
                     print "Reloading in {0} seconds (c-C to force quit)...".format(refreshDelay)
                     time.sleep(refreshDelay)
                 else:
@@ -239,12 +239,9 @@ def make_post(saleArray, saleLink):
 
 def get_spotlight(sale):
     """Finds appropriate champion or skin spotlight video for sale"""
-    saleSearch = sale.saleName.replace(' ', '+')
-
-    if sale.isSkin:
-        channel, searchTerm = ('SkinSpotlights', saleSearch + '+Skin+Spotlight')
-    else:
-        channel, searchTerm = ('RiotGamesInc', saleSearch + '+Champion+Spotlight')
+    channel = 'SkinSpotlights' if sale.isSkin else 'RiotGamesInc'
+    searchTerm = (sale.saleName + (' Skin' if sale.isSkin else ' Champion') + ' Spotlight')
+    searchTerm = searchTerm.replace(' ', '+')
 
     videoPage = 'https://www.youtube.com/user/{0}/search?query={1}'.format(channel, searchTerm)
     pageContent = load_page(videoPage)[1]
@@ -256,7 +253,7 @@ def get_spotlight(sale):
         spotlightURL = 'https://www.youtube.com' + slug
     except IndexError:
         spotlightURL = None
-        spotlightName = "No spotlight found (parsing error)."
+        spotlightName = "Error parsing spotlight."
 
     # Handle cases where no spotlight exists, ie. Janna (Forecast Janna is top result)
     if not sale.isSkin:
@@ -275,17 +272,16 @@ def post_to_reddit(postTitle, postBody, saleLink):
             try:
                 return func(*args, **kwargs)
             except praw.errors.RateLimitExceeded as error:
-                print 'Rate limit exceeded. Sleeping for {0} seconds'.format(error.sleep_time)
-                time.sleep(error.sleep_time)
+                sleepTime = int(error.sleep_time + 1)
+                print 'Rate limit exceeded. Sleeping for {0} seconds.'.format(sleepTime)
+                time.sleep(sleepTime)
 
     r = praw.Reddit(user_agent=settings.userAgent)
     r.login(settings.username, settings.password)
 
     for subreddit, isLinkPost in settings.subreddits:
-        if isLinkPost:
-            submission = handle_rate_limit(r.submit, subreddit, postTitle, url=saleLink)
-        else:
-            submission = handle_rate_limit(r.submit, subreddit, postTitle, text=postBody)
+        postArg = {'url': saleLink} if isLinkPost else {'text': postBody}
+        submission = handle_rate_limit(r.submit, subreddit, postTitle, **postArg)
 
         print sSuccess("Submitted {0} post at {1}/".format(
             "link" if isLinkPost else "self",
@@ -405,8 +401,7 @@ def repair_lastrun():
         *rotation[(lastRotationIndex + 1) % 4]))
 
 
-@click.command(add_help_option=False)
-@click.help_option('-h', '--help')
+@click.command(context_settings={'help_option_names': ['-h', '--help']})
 @click.argument('link', required=False)
 @click.option('--delay', '-d', default=0.0, help="Delay before running script.", metavar='<hours>')
 @click.option('--last', '-l', is_flag=True, help="Crawls most recent sale data.")
