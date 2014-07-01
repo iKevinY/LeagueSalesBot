@@ -7,7 +7,7 @@ import re
 import datetime
 import time
 
-import httplib2
+import requests
 import praw
 import click
 
@@ -38,23 +38,20 @@ def sWarning(s): return click.style(str(s), fg='red')
 
 
 def load_page(link, verbose=False, responseStatus=False):
-    try:
-        if responseStatus:
-            if not verbose:
-                print link + "...\t",
-                sys.stdout.flush()
-            response = httplib2.Http().request(link, "HEAD")[0]
-            if not verbose:
-                if (response.status == 200):
-                    print sSuccess(response.status)
-                else:
-                    print sWarning(response.status)
+    if responseStatus:
+        if not verbose:
+            print link + "...\t",
+            sys.stdout.flush()
+            request = requests.get(link)
+        if not verbose:
+            if request.status_code == 200:
+                print sSuccess(request.status_code)
+            else:
+                print sWarning(request.status_code)
 
-            return response.status
-        else:
-            return httplib2.Http().request(link)
-    except httplib2.ServerNotFoundError:
-        sys.exit(sWarning("Connection error."))
+        return request.status_code
+    else:
+        return requests.get(link)
 
 
 def format_range(saleStart, saleEnd):
@@ -164,7 +161,7 @@ def get_sales(saleLink):
         '<a href="(http://gameinfo.(?:na|euw).leagueoflegends.com/en/game-info/champions/\S+?)"',
     )
 
-    pageContent = load_page(saleLink)[1]
+    pageContent = load_page(saleLink).text
     saleList, skinList, infoList = (re.findall(regex, pageContent) for regex in regexes)
 
     for i, sale in enumerate(saleArray):
@@ -244,7 +241,7 @@ def get_spotlight(sale):
     searchTerm = searchTerm.replace(' ', '+')
 
     videoPage = 'https://www.youtube.com/user/{0}/search?query={1}'.format(channel, searchTerm)
-    pageContent = load_page(videoPage)[1]
+    pageContent = load_page(videoPage).text
 
     try:
         searchResult = '<h3 class="yt-lockup-title"><a.*?href="(\S*)">(.*)</a></h3>'
