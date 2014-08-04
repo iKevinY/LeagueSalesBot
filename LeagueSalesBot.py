@@ -276,8 +276,6 @@ def post_to_reddit(postTitle, postBody, saleLink):
                 time.sleep(sleepTime)
 
     r = praw.Reddit(user_agent=settings.userAgent)
-
-    # r.login(settings.username, settings.password)
     r.login(os.environ['LSB_USERNAME'], os.environ['LSB_PASSWORD'])
 
     for subreddit, isLinkPost in settings.subreddits:
