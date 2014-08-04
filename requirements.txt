@@ -1,4 +1,0 @@
-requests>=2.3.0
-praw>=2.1.17
-click>=2.4
-python-binary-memcached

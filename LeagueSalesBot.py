@@ -11,10 +11,9 @@ import requests
 import praw
 import click
 
+import lastrun
 import settings
 import skins
-
-import bmemcached
 
 class Sale(object):
     saleName = ''
@@ -32,12 +31,6 @@ class Champ(Sale):
     infoPage = None
 
 
-mc = bmemcached.Client(os.environ.get('MEMCACHEDCLOUD_SERVERS').split(','),
-                           os.environ.get('MEMCACHEDCLOUD_USERNAME'),
-                           os.environ.get('MEMCACHEDCLOUD_PASSWORD')
-                          )
-
-
 """Define functions for printing ANSI-coloured terminal messages"""
 def sSpecial(s): return click.style(str(s), fg='cyan', bold=True)
 def sSuccess(s): return click.style(str(s), fg='green')
@@ -49,7 +42,9 @@ def load_page(link, verbose=False, responseStatus=False):
         if not verbose:
             print link + "...\t",
             sys.stdout.flush()
-            request = requests.get(link)
+
+        request = requests.get(link)
+
         if not verbose:
             if request.status_code == 200:
                 print sSuccess(request.status_code)
@@ -115,12 +110,8 @@ def get_sale_page(link, delay, refresh, verbose):
     else:
         try:
             # Uses lastRotation value to differentiate between Mon/Thurs date deltas
-
-            lastSaleEnd = mc.get('lastSaleEnd')
-            lastRotation = int(mc.get('lastRotation'))
-
-            lastSaleEnd = datetime.datetime.strptime(lastSaleEnd, '%Y-%m-%d')
-            saleStart = lastSaleEnd + datetime.timedelta((lastRotation + 1) % 2)
+            lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
+            saleStart = lastSaleEnd + datetime.timedelta((lastrun.lastRotation + 1) % 2)
             saleEnd = saleStart + datetime.timedelta(3) # Four-day sales
         except AttributeError:
             print sWarning("Invalid data in lastrun.py. Attemping to repair.")
@@ -228,10 +219,7 @@ def make_post(saleArray, saleLink):
     """Formats sale data into Reddit post"""
     # Determine prices of next sale skins given the previous sale (stored in lastrun.py)
     rotation = [(975, 750, 520), (1350, 975, 520), (975, 750, 520), (975, 975, 520)]
-
-    lastRotation = int(mc.get('lastRotation'))
-
-    nextRotation = rotation[(lastRotation + 2) % 4]
+    nextRotation = rotation[(lastrun.lastRotation + 2) % 4]
 
     return (
         '| Icon | Skin/Champion | Sale Price | Regular Price | Resources |\n' +
@@ -288,7 +276,7 @@ def post_to_reddit(postTitle, postBody, saleLink):
                 time.sleep(sleepTime)
 
     r = praw.Reddit(user_agent=settings.userAgent)
-    r.login(os.environ['LSB_USERNAME'], os.environ['LSB_PASSWORD'])
+    r.login(settings.username, settings.password)
 
     for subreddit, isLinkPost in settings.subreddits:
         postArg = {'url': saleLink} if isLinkPost else {'text': postBody}
@@ -307,8 +295,8 @@ def post_to_reddit(postTitle, postBody, saleLink):
 def update_lastrun(saleEndText, rotationIndex=None):
     """Updates lastrun.py with sale date and rotation information"""
     try:
-        lastSaleEnd, lastRotation = mc.get('lastSaleEnd'), mc.get('lastRotation')
-    except:
+        lastSaleEnd, lastRotation = lastrun.lastSaleEnd, lastrun.lastRotation
+    except AttributeError:
         lastSaleEnd, lastRotation = None, None
 
     if rotationIndex is None:
@@ -317,11 +305,14 @@ def update_lastrun(saleEndText, rotationIndex=None):
         except AttributeError:
             pass
 
+    directory = os.path.dirname(os.path.realpath(__file__))
+    path = os.path.join(directory, 'lastrun.py')
+
     print sSuccess("Modified lastrun.py from ({0}, {1}) to".format(lastSaleEnd, lastRotation)),
     sys.stdout.flush()
 
-    mc.set('lastSaleEnd', saleEndText)
-    mc.set('lastRotation', rotationIndex)
+    with open(path, 'w+') as f:
+        f.write('lastSaleEnd = "{0}"\nlastRotation = {1}\n'.format(saleEndText, rotationIndex))
 
     print sSuccess("({0}, {1}).".format(saleEndText, rotationIndex))
 
@@ -430,7 +421,7 @@ def main(link, delay, last, manual, refresh, verbose, repair):
         saleLink, dateRange = manual_post()
     else:
         if last:
-            lastSaleEnd = datetime.datetime.strptime(mc.get('lastSaleEnd'), '%Y-%m-%d')
+            lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
             link = extrapolate_link(lastSaleEnd)
 
         saleLink, dateRange = get_sale_page(link, delay, refresh, verbose)

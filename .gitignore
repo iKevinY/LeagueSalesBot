@@ -1,2 +1,4 @@
 *.pyc
+settings.py
+lastrun.py
 .DS_Store
