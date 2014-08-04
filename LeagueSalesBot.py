@@ -305,14 +305,14 @@ def update_lastrun(saleEndText, rotationIndex=None):
         except AttributeError:
             pass
 
-    directory = os.path.dirname(os.path.realpath(__file__))
-    path = os.path.join(directory, 'lastrun.py')
+    # directory = os.path.dirname(os.path.realpath(__file__))
+    # path = os.path.join(directory, 'lastrun.py')
 
     print sSuccess("Modified lastrun.py from ({0}, {1}) to".format(lastSaleEnd, lastRotation)),
     sys.stdout.flush()
 
-    with open(path, 'w+') as f:
-        f.write('lastSaleEnd = "{0}"\nlastRotation = {1}\n'.format(saleEndText, rotationIndex))
+    # with open(path, 'w+') as f:
+    #     f.write('lastSaleEnd = "{0}"\nlastRotation = {1}\n'.format(saleEndText, rotationIndex))
 
     print sSuccess("({0}, {1}).".format(saleEndText, rotationIndex))
 
