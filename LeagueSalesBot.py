@@ -49,9 +49,7 @@ def load_page(link, verbose=False, responseStatus=False):
         if not verbose:
             print link + "...\t",
             sys.stdout.flush()
-
-        request = requests.get(link)
-
+            request = requests.get(link)
         if not verbose:
             if request.status_code == 200:
                 print sSuccess(request.status_code)
