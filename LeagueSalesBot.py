@@ -16,19 +16,22 @@ import settings
 import skins
 
 class Sale(object):
-    saleName = ''
-    salePrice = ''
-    regularPrice = ''
-    spotlight = None
+    def __init__(self):
+        self.saleName = ''
+        self.salePrice = ''
+        self.regularPrice = ''
+        self.spotlight = None
 
 class Skin(Sale):
-    isSkin = True
-    splashArt = None
-    inGameArt = None
+    def __init__(self):
+        self.isSkin = True
+        self.splashArt = None
+        self.inGameArt = None
 
 class Champ(Sale):
-    isSkin = False
-    infoPage = None
+    def __init__(self):
+        self.isSkin = False
+        self.infoPage = None
 
 
 """Define functions for printing ANSI-coloured terminal messages"""
@@ -43,7 +46,10 @@ def load_page(link, verbose=False, responseStatus=False):
             print link + "...\t",
             sys.stdout.flush()
 
-        request = requests.get(link)
+        try:
+            request = requests.get(link)
+        except requests.exceptions.ConnectionError:
+            sys.exit(sWarning('Connection error.'))
 
         if not verbose:
             if request.status_code == 200:
@@ -80,10 +86,11 @@ def format_resources(sale):
         )
 
     return ', '.join(
-        ['[{0}]({1})'.format(text, link) for link, text in resources if link is not None])
+        '[{0}]({1})'.format(text, link) for link, text in resources if link is not None
+    )
 
 
-def get_sale_page(link, delay, refresh, verbose):
+def get_sale_page(link, delay, verbose):
     """Loads appropriate content based on most recent sale or supplied test link"""
     if link:
         if load_page(link, verbose, responseStatus=True) != 200:
@@ -109,7 +116,8 @@ def get_sale_page(link, delay, refresh, verbose):
             saleLink = link
     else:
         try:
-            # Uses lastRotation value to differentiate between Mon/Thurs date deltas
+            # Use value of lastRotation to differentiate between Monday and Thursday
+            # sales (which have different offsets before the next sale)
             lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
             saleStart = lastSaleEnd + datetime.timedelta((lastrun.lastRotation + 1) % 2)
             saleEnd = saleStart + datetime.timedelta(3) # Four-day sales
@@ -142,12 +150,9 @@ def get_sale_page(link, delay, refresh, verbose):
                     saleLink = link
                     break
             else:
-                if refresh:
-                    refreshDelay = 15
-                    print "Reloading in {0} seconds (c-C to force quit)...".format(refreshDelay)
-                    time.sleep(refreshDelay)
-                else:
-                    sys.exit(sWarning("Terminating script."))
+                refreshDelay = settings.refresh
+                print "Reloading in {0} seconds (c-C to force quit)...".format(refreshDelay)
+                time.sleep(refreshDelay)
 
     return saleLink, dateRange
 
@@ -170,7 +175,8 @@ def get_sales(saleLink):
         try:
             sale.saleName, sale.regularPrice, sale.salePrice = saleList[i]
         except IndexError:
-            sys.exit(sWarning("Sale data could not be parsed by regexes."))
+            print(sWarning("Sale data could not be parsed by regexes."))
+            return None
 
         if sale.isSkin:
             try:
@@ -239,8 +245,8 @@ def make_post(saleArray, saleLink):
 def get_spotlight(sale):
     """Finds appropriate champion or skin spotlight video for sale"""
     channel = 'SkinSpotlights' if sale.isSkin else 'RiotGamesInc'
-    searchTerm = (sale.saleName + (' Skin' if sale.isSkin else ' Champion') + ' Spotlight')
-    searchTerm = searchTerm.replace(' ', '+')
+    searchTerm = '{0} {1} Spotlight'.format(
+        sale.saleName, 'Skin' if sale.isSkin else 'Champion').replace(' ', '+')
 
     videoPage = 'https://www.youtube.com/user/{0}/search?query={1}'.format(channel, searchTerm)
     pageContent = load_page(videoPage).text
@@ -248,7 +254,7 @@ def get_spotlight(sale):
     try:
         searchResult = '<h3 class="yt-lockup-title"><a.*?href="(\S*)">(.*)</a></h3>'
         slug, spotlightName = re.findall(searchResult, pageContent)[0]
-        spotlightName = spotlightName.replace('&#39;', "'")
+        spotlightName = spotlightName.replace('&#39;', "'") # patch for apostrophe
         spotlightURL = 'https://www.youtube.com' + slug
     except IndexError:
         spotlightURL = None
@@ -263,7 +269,7 @@ def get_spotlight(sale):
     return spotlightURL, spotlightName
 
 
-def post_to_reddit(postTitle, postBody, saleLink):
+def post_to_reddit(subreddit, postTitle, content):
     """Posts self or link posts to subreddits as defined in settings.py"""
     # Handle Reddit's automatic rate limiting
     def handle_rate_limit(func, *args, **kwargs):
@@ -275,21 +281,16 @@ def post_to_reddit(postTitle, postBody, saleLink):
                 print 'Rate limit exceeded. Sleeping for {0} seconds.'.format(sleepTime)
                 time.sleep(sleepTime)
 
+    postContent = {'url' if content.startswith('http') else 'text': content}
+
     r = praw.Reddit(user_agent=settings.userAgent)
     r.login(settings.username, settings.password)
+    submission = handle_rate_limit(r.submit, subreddit, postTitle, **postContent)
 
-    for subreddit, isLinkPost in settings.subreddits:
-        postArg = {'url': saleLink} if isLinkPost else {'text': postBody}
-        submission = handle_rate_limit(r.submit, subreddit, postTitle, **postArg)
-
-        print sSuccess("Submitted {0} post at {1}/".format(
-            "link" if isLinkPost else "self",
-            submission.permalink.rsplit('/', 2)[0])
-        )
-
-        if isLinkPost:
-            handle_rate_limit(submission.add_comment, postBody)
-            print sSuccess("Commented on link post at /r/{0}.".format(subreddit))
+    print sSuccess("Submitted {0} post at {1}/".format(
+        "link" if content.startswith('http') else "self",
+        submission.permalink.rsplit('/', 2)[0])
+    )
 
 
 def update_lastrun(saleEndText, rotationIndex=None):
@@ -379,7 +380,7 @@ def repair_lastrun():
     lastRotation = get_rotation(lastSaleLink)
 
     if lastRotation == ('975', '750', '520'):
-        print "Extrapolating two sales back for rotation."
+        print "Extrapolating two sales back for correct rotation (ambiguous case)."
         for delta in (3, 4):
             twoSaleEnd = lastSaleEnd - datetime.timedelta(delta)
             twoLink = extrapolate_link(twoSaleEnd)
@@ -400,19 +401,19 @@ def repair_lastrun():
         *rotation[(lastRotationIndex + 1) % 4]))
 
 
-@click.command(context_settings={'help_option_names': ['-h', '--help']})
-@click.argument('link', required=False)
+@click.command()
 @click.option('--delay', '-d', default=0.0, help="Delay before running script.", metavar='<hours>')
 @click.option('--last', '-l', is_flag=True, help="Crawls most recent sale data.")
 @click.option('--manual', '-m', is_flag=True, help="Manually create post.")
-@click.option('--refresh', '-r', is_flag=True, help="Automatically refresh sale pages.")
 @click.option('--verbose', '-v', is_flag=True, help="Output entire post body.")
 @click.option('--repair', is_flag=True, help="Attemps to repair data in lastrun.py.")
+@click.option('--link', default=None, help="Link to sale page.", metavar='<link>')
+@click.argument('subreddits', nargs=-1)
 
-def main(link, delay, last, manual, refresh, verbose, repair):
+def main(delay, last, link, manual, verbose, repair, subreddits):
     """
-    Python script that generates Reddit post summarizing the biweekly League
-    of Legends champion and skin sales. Uses the httplib2 and PRAW libraries.
+    Python script that generates Reddit-formatted summaries of the biweekly
+    League of Legends champion and skin sales.
     """
 
     if repair:
@@ -424,12 +425,21 @@ def main(link, delay, last, manual, refresh, verbose, repair):
             lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
             link = extrapolate_link(lastSaleEnd)
 
-        saleLink, dateRange = get_sale_page(link, delay, refresh, verbose)
+        saleLink, dateRange = get_sale_page(link, delay, verbose)
 
     saleArray = get_sales(saleLink)
 
+    # Post link post if sale parsing failed (fallback to ensure a post gets made)
+    if saleArray is None:
+        if subreddits:
+            postTitle = 'Champion & Skin Sale — {0}'.format(dateRange)
+            post_to_reddit(subreddits[0], postTitle, saleLink)
+
+        sys.exit()
+
     postTitle = settings.baseTitle.format(
-        ', '.join(sale.saleName for sale in saleArray if sale.isSkin), dateRange
+        ', '.join(sale.saleName for sale in saleArray if sale.isSkin),
+        dateRange
     )
 
     if not verbose:
@@ -450,11 +460,15 @@ def main(link, delay, last, manual, refresh, verbose, repair):
         if manual and not click.confirm("Post to Reddit?"):
             sys.exit(sWarning("Did not post."))
         else:
-            post_to_reddit(postTitle, postBody, saleLink)
+            if not subreddits:
+                print "There were no subreddit arguments given."
+                sys.exit()
+            else:
+                for subreddit in subreddits:
+                    post_to_reddit(subreddit, postTitle, postBody)
+
             endOfSale = (datetime.datetime.now() + datetime.timedelta(4)).strftime('%Y-%m-%d')
             update_lastrun(endOfSale)
-
-    sys.exit()
 
 
 if __name__ == "__main__":
