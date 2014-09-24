@@ -36,18 +36,10 @@ class Champ(Sale):
 
 def load_page(link, responseStatus=False):
     if responseStatus:
-        print link + "...\t",
-        sys.stdout.flush()
-
         try:
             request = requests.get(link)
         except requests.exceptions.ConnectionError:
             sys.exit('Connection error.')
-
-        status = request.status_code
-        click.secho(request.status_code,
-            fg='green' if status == 200 else 'red'
-        )
 
         return request.status_code
     else:
@@ -137,14 +129,15 @@ def get_sale_page(link, delay):
 
         saleLink = None
 
+        refreshDelay = settings.refresh
+        print "Refreshing every {0} seconds (c-C to force quit)...".format(refreshDelay)
+
         while not saleLink:
             for link in links:
                 if load_page(link, responseStatus=True) == 200:
                     saleLink = link
                     break
             else:
-                refreshDelay = settings.refresh
-                print "Reloading in {0} seconds (c-C to force quit)...".format(refreshDelay)
                 time.sleep(refreshDelay)
 
     return saleLink, dateRange
@@ -381,13 +374,11 @@ def main(delay, last, link, repair, subreddits):
 
     if repair:
         repair_lastrun()
-    else:
-        if last:
-            lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
-            link = extrapolate_link(lastSaleEnd)
+    elif last:
+        lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
+        link = extrapolate_link(lastSaleEnd)
 
-        saleLink, dateRange = get_sale_page(link, delay)
-
+    saleLink, dateRange = get_sale_page(link, delay)
     saleArray = get_sales(saleLink)
 
     # Post link post if sale parsing failed (fallback to ensure a post gets made)
@@ -403,7 +394,7 @@ def main(delay, last, link, repair, subreddits):
         dateRange
     )
 
-    click.secho(postTitle, fg='cyan')
+    click.secho(postTitle, fg='cyan', bold=True)
 
     # Get spotlights and print to terminal
     for sale in saleArray:
@@ -411,22 +402,19 @@ def main(delay, last, link, repair, subreddits):
         print '{saleName: <30}{salePrice} RP\t{spotlightName}'.format(**sale.__dict__)
 
     postBody = make_post(saleArray, saleLink)
-    print postBody
+    print '\n\n' + postBody + '\n\n'
 
     # Post to Reddit and update lastrun.py with correct information if link was not supplied
     if not link:
-        if not click.confirm("Post to Reddit?"):
-            sys.exit("Did not post.")
+        if not subreddits:
+            print "There were no subreddit arguments given."
+            sys.exit()
         else:
-            if not subreddits:
-                print "There were no subreddit arguments given."
-                sys.exit()
-            else:
-                for subreddit in subreddits:
-                    post_to_reddit(subreddit, postTitle, postBody)
+            for subreddit in subreddits:
+                post_to_reddit(subreddit, postTitle, postBody)
 
-            endOfSale = (datetime.datetime.now() + datetime.timedelta(4)).strftime('%Y-%m-%d')
-            update_lastrun(endOfSale)
+        endOfSale = (datetime.datetime.now() + datetime.timedelta(4)).strftime('%Y-%m-%d')
+        update_lastrun(endOfSale)
 
 
 if __name__ == "__main__":
