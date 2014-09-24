@@ -34,28 +34,20 @@ class Champ(Sale):
         self.infoPage = None
 
 
-"""Define functions for printing ANSI-coloured terminal messages"""
-def sSpecial(s): return click.style(str(s), fg='cyan', bold=True)
-def sSuccess(s): return click.style(str(s), fg='green')
-def sWarning(s): return click.style(str(s), fg='red')
-
-
-def load_page(link, verbose=False, responseStatus=False):
+def load_page(link, responseStatus=False):
     if responseStatus:
-        if not verbose:
-            print link + "...\t",
-            sys.stdout.flush()
+        print link + "...\t",
+        sys.stdout.flush()
 
         try:
             request = requests.get(link)
         except requests.exceptions.ConnectionError:
-            sys.exit(sWarning('Connection error.'))
+            sys.exit('Connection error.')
 
-        if not verbose:
-            if request.status_code == 200:
-                print sSuccess(request.status_code)
-            else:
-                print sWarning(request.status_code)
+        status = request.status_code
+        click.secho(request.status_code,
+            fg='green' if status == 200 else 'red'
+        )
 
         return request.status_code
     else:
@@ -85,21 +77,21 @@ def format_resources(sale):
             (sale.infoPage, 'Official Info Page'),
         )
 
-    return ', '.join(
-        '[{0}]({1})'.format(text, link) for link, text in resources if link is not None
+    return ', '.join('[{0}]({1})'.format(text, link)
+        for link, text in resources if link is not None
     )
 
 
-def get_sale_page(link, delay, verbose):
+def get_sale_page(link, delay):
     """Loads appropriate content based on most recent sale or supplied test link"""
     if link:
-        if load_page(link, verbose, responseStatus=True) != 200:
-            sys.exit(sWarning("Terminating script."))
+        if load_page(link, responseStatus=True) != 200:
+            sys.exit("Terminating script.")
         else:
             try:
                 start, end = re.findall('.*(\d{4})-(\d{4})', link)[0]
             except IndexError:
-                sys.exit(sWarning("Invalid sale page URL."))
+                sys.exit("Invalid sale page URL.")
 
             for dateFormat in ('%m%d', '%d%m'):
                 try:
@@ -111,7 +103,7 @@ def get_sale_page(link, delay, verbose):
                     # Pass to try other date formats; for loop will catch the exception
                     pass
             else:
-                sys.exit(sWarning("Date range could not be determined from sale URL."))
+                sys.exit("Date range could not be determined from sale URL.")
 
             saleLink = link
     else:
@@ -122,7 +114,7 @@ def get_sale_page(link, delay, verbose):
             saleStart = lastSaleEnd + datetime.timedelta((lastrun.lastRotation + 1) % 2)
             saleEnd = saleStart + datetime.timedelta(3) # Four-day sales
         except AttributeError:
-            print sWarning("Invalid data in lastrun.py. Attemping to repair.")
+            print "Invalid data in lastrun.py. Attemping to repair."
             repair_lastrun()
 
         dateRange = format_range(saleStart, saleEnd)
@@ -135,7 +127,8 @@ def get_sale_page(link, delay, verbose):
         links = [settings.baseLink.format(*permutation) for permutation in linkPermutations]
 
         print "Last sale ended on {0}. Requesting {1} sale pages.".format(
-            sSpecial(lastSaleEnd.strftime("%B %-d")), sSpecial(dateRange))
+            lastSaleEnd.strftime("%B %-d"), dateRange
+        )
 
         if delay:
             delay = int(delay) if delay.is_integer() else delay
@@ -146,7 +139,7 @@ def get_sale_page(link, delay, verbose):
 
         while not saleLink:
             for link in links:
-                if load_page(link, verbose, responseStatus=True) == 200:
+                if load_page(link, responseStatus=True) == 200:
                     saleLink = link
                     break
             else:
@@ -175,7 +168,7 @@ def get_sales(saleLink):
         try:
             sale.saleName, sale.regularPrice, sale.salePrice = saleList[i]
         except IndexError:
-            print(sWarning("Sale data could not be parsed by regexes."))
+            print "Sale data could not be parsed by regexes."
             return None
 
         if sale.isSkin:
@@ -183,13 +176,13 @@ def get_sales(saleLink):
                 sale.splashArt = skinList[i*2]
                 sale.inGameArt = skinList[i*2 + 1]
             except IndexError:
-                sWarning("Art for " + sale.saleName + " not parsed.")
+                print "Art for %s not parsed." % sale.saleName
                 sale.splashArt, sale.inGameArt = None, None
         else:
             try:
                 sale.infoPage = infoList[(i - 3) * 2]
             except IndexError:
-                sWarning("Info page for " + sale.saleName + " not parsed.")
+                print "Info page for %s not parsed." % sale.saleName
                 sale.infoPage = None
 
     # Sorts sale array by skins > champions and then by price (in reverse)
@@ -264,7 +257,7 @@ def get_spotlight(sale):
     if not sale.isSkin:
         if ("Spotlight" not in spotlightName) or (sale.saleName not in spotlightName):
             spotlightURL = None
-            spotlightName = sWarning(spotlightName)
+            spotlightName = click.style(spotlightName, fg='red')
 
     return spotlightURL, spotlightName
 
@@ -272,7 +265,7 @@ def get_spotlight(sale):
 def post_to_reddit(subreddit, postTitle, content):
     """Posts self or link posts to subreddits as defined in settings.py"""
     # Handle Reddit's automatic rate limiting
-    def handle_rate_limit(func, *args, **kwargs):
+    def rate_limited(func, *args, **kwargs):
         while True:
             try:
                 return func(*args, **kwargs)
@@ -285,11 +278,12 @@ def post_to_reddit(subreddit, postTitle, content):
 
     r = praw.Reddit(user_agent=settings.userAgent)
     r.login(settings.username, settings.password)
-    submission = handle_rate_limit(r.submit, subreddit, postTitle, **postContent)
+    submission = rate_limited(r.submit, subreddit, postTitle, **postContent)
 
-    print sSuccess("Submitted {0} post at {1}/".format(
+    click.secho("Submitted {0} post at {1}/".format(
         "link" if content.startswith('http') else "self",
-        submission.permalink.rsplit('/', 2)[0])
+        submission.permalink.rsplit('/', 2)[0]),
+        fg='green'
     )
 
 
@@ -309,42 +303,13 @@ def update_lastrun(saleEndText, rotationIndex=None):
     directory = os.path.dirname(os.path.realpath(__file__))
     path = os.path.join(directory, 'lastrun.py')
 
-    print sSuccess("Modified lastrun.py from ({0}, {1}) to".format(lastSaleEnd, lastRotation)),
+    print "Modified lastrun.py from ({0}, {1}) to".format(lastSaleEnd, lastRotation),
     sys.stdout.flush()
 
     with open(path, 'w+') as f:
         f.write('lastSaleEnd = "{0}"\nlastRotation = {1}\n'.format(saleEndText, rotationIndex))
 
-    print sSuccess("({0}, {1}).".format(saleEndText, rotationIndex))
-
-
-def manual_post():
-    """Manually enter sale data from the CLI"""
-    saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
-
-    inputDate = click.prompt("Enter sale start date [YYMMDD]", type=str)
-    saleStart = datetime.datetime.strptime(inputDate, '%y%m%d')
-    saleEnd = saleStart + datetime.timedelta(3)
-
-    dateRange = format_range(saleStart, saleEnd)
-
-    dateFormat = tuple(datetime.datetime.strftime(date, '%m%d') for date in (saleStart, saleEnd))
-    saleLink = (settings.baseLink.format('na', dateFormat[0], dateFormat[1]))
-
-    for i, sale in enumerate(saleArray):
-        print "\nSkin #{}".format(i + 1) if sale.isSkin else "\nChampion #{}".format(i - 2)
-
-        sale.saleName = click.prompt("Enter sale name", value_proc=str)
-        sale.regularPrice = click.prompt("Enter regular cost", value_proc=str)
-        sale.salePrice = str(int(sale.regularPrice) // 2)
-
-        if sale.isSkin:
-            sale.splashArt = click.prompt("Splash art URL", value_proc=str, default='/#')
-            sale.inGameArt = click.prompt("In-game art URL", value_proc=str, default='/#')
-        else:
-            sale.infoPage = click.prompt("Info page URL", value_proc=str, default='/#')
-
-    return saleLink, dateRange, saleArray
+    print "({0}, {1}).".format(saleEndText, rotationIndex)
 
 
 def extrapolate_link(lastSaleEnd, region='na'):
@@ -369,7 +334,7 @@ def repair_lastrun():
             lastSaleEnd, lastSaleLink = endDate, link
             break
     else:
-        sys.exit(sWarning("Could not repair sale date data."))
+        sys.exit("Could not repair sale date data.")
 
     def get_rotation(link):
         return tuple(sale.regularPrice for sale in get_sales(link) if sale.isSkin)
@@ -388,7 +353,7 @@ def repair_lastrun():
                 twoRotation = get_rotation(twoLink)
                 break
         else:
-            sys.exit(sWarning("Could not determine rotation."))
+            sys.exit("Could not determine rotation.")
 
         lastRotationIndex = (rotation.index(twoRotation) + 1) % 4
     else:
@@ -397,20 +362,18 @@ def repair_lastrun():
     lastSaleEndText = datetime.datetime.strftime(lastSaleEnd, '%Y-%m-%d')
     update_lastrun(lastSaleEndText, rotationIndex=lastRotationIndex)
 
-    sys.exit(sSuccess("lastrun.py repaired successfully. Upcoming sale: {0}, {1}, {2} RP").format(
-        *rotation[(lastRotationIndex + 1) % 4]))
+    sys.exit("lastrun.py repaired successfully. Upcoming sale: {0}, {1}, {2} RP").format(
+        *rotation[(lastRotationIndex + 1) % 4])
 
 
 @click.command()
 @click.option('--delay', '-d', default=0.0, help="Delay before running script.", metavar='<hours>')
 @click.option('--last', '-l', is_flag=True, help="Crawls most recent sale data.")
-@click.option('--manual', '-m', is_flag=True, help="Manually create post.")
-@click.option('--verbose', '-v', is_flag=True, help="Output entire post body.")
 @click.option('--repair', is_flag=True, help="Attemps to repair data in lastrun.py.")
 @click.option('--link', default=None, help="Link to sale page.", metavar='<link>')
 @click.argument('subreddits', nargs=-1)
 
-def main(delay, last, link, manual, verbose, repair, subreddits):
+def main(delay, last, link, repair, subreddits):
     """
     Python script that generates Reddit-formatted summaries of the biweekly
     League of Legends champion and skin sales.
@@ -418,14 +381,12 @@ def main(delay, last, link, manual, verbose, repair, subreddits):
 
     if repair:
         repair_lastrun()
-    elif manual:
-        saleLink, dateRange = manual_post()
     else:
         if last:
             lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
             link = extrapolate_link(lastSaleEnd)
 
-        saleLink, dateRange = get_sale_page(link, delay, verbose)
+        saleLink, dateRange = get_sale_page(link, delay)
 
     saleArray = get_sales(saleLink)
 
@@ -442,23 +403,20 @@ def main(delay, last, link, manual, verbose, repair, subreddits):
         dateRange
     )
 
-    if not verbose:
-        print sSpecial(postTitle)
+    click.secho(postTitle, fg='cyan')
 
     # Get spotlights and print to terminal
     for sale in saleArray:
         sale.spotlight, sale.spotlightName = get_spotlight(sale)
-        if not verbose:
-            print '{saleName: <30}{salePrice} RP\t{spotlightName}'.format(**sale.__dict__)
+        print '{saleName: <30}{salePrice} RP\t{spotlightName}'.format(**sale.__dict__)
 
-    # Format post body and print appropriately depending on verbosity
     postBody = make_post(saleArray, saleLink)
-    print postBody if verbose else sSuccess("Post formatted successfully.")
+    print postBody
 
     # Post to Reddit and update lastrun.py with correct information if link was not supplied
     if not link:
-        if manual and not click.confirm("Post to Reddit?"):
-            sys.exit(sWarning("Did not post."))
+        if not click.confirm("Post to Reddit?"):
+            sys.exit("Did not post.")
         else:
             if not subreddits:
                 print "There were no subreddit arguments given."
