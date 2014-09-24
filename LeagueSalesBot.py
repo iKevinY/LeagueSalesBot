@@ -34,18 +34,6 @@ class Champ(Sale):
         self.infoPage = None
 
 
-def load_page(link, responseStatus=False):
-    if responseStatus:
-        try:
-            request = requests.get(link)
-        except requests.exceptions.ConnectionError:
-            sys.exit('Connection error.')
-
-        return request.status_code
-    else:
-        return requests.get(link)
-
-
 def format_range(saleStart, saleEnd):
     """Returns properly formatted date range for sale start and end"""
     if saleStart.month == saleEnd.month:
@@ -77,7 +65,7 @@ def format_resources(sale):
 def get_sale_page(link, delay):
     """Loads appropriate content based on most recent sale or supplied test link"""
     if link:
-        if load_page(link, responseStatus=True) != 200:
+        if requests.get(link).status_code != 200:
             sys.exit("Terminating script.")
         else:
             try:
@@ -134,7 +122,7 @@ def get_sale_page(link, delay):
 
         while not saleLink:
             for link in links:
-                if load_page(link, responseStatus=True) == 200:
+                if requests.get(link).status_code == 200:
                     saleLink = link
                     break
             else:
@@ -154,7 +142,7 @@ def get_sales(saleLink):
         '<a href="(http://gameinfo.(?:na|euw).leagueoflegends.com/en/game-info/champions/\S+?)"',
     )
 
-    pageContent = load_page(saleLink).text
+    pageContent = requests.get(saleLink).text
     saleList, skinList, infoList = (re.findall(regex, pageContent) for regex in regexes)
 
     for i, sale in enumerate(saleArray):
@@ -235,7 +223,7 @@ def get_spotlight(sale):
         sale.saleName, 'Skin' if sale.isSkin else 'Champion').replace(' ', '+')
 
     videoPage = 'https://www.youtube.com/user/{0}/search?query={1}'.format(channel, searchTerm)
-    pageContent = load_page(videoPage).text
+    pageContent = requests.get(videoPage).text
 
     try:
         searchResult = '<h3 class="yt-lockup-title"><a.*?href="(\S*)">(.*)</a></h3>'
@@ -323,7 +311,7 @@ def repair_lastrun():
         endDate = datetime.datetime.now() - datetime.timedelta(delta)
         link = extrapolate_link(endDate)
 
-        if load_page(link, responseStatus=True) == 200:
+        if requests.get(link).status_code == 200:
             lastSaleEnd, lastSaleLink = endDate, link
             break
     else:
@@ -342,7 +330,7 @@ def repair_lastrun():
         for delta in (3, 4):
             twoSaleEnd = lastSaleEnd - datetime.timedelta(delta)
             twoLink = extrapolate_link(twoSaleEnd)
-            if load_page(twoLink, responseStatus=True) == 200:
+            if requests.get(twoLink).status_code == 200:
                 twoRotation = get_rotation(twoLink)
                 break
         else:
@@ -407,8 +395,7 @@ def main(delay, last, link, repair, subreddits):
     # Post to Reddit and update lastrun.py with correct information if link was not supplied
     if not link:
         if not subreddits:
-            print "There were no subreddit arguments given."
-            sys.exit()
+            sys.exit("There were no subreddit arguments given.")
         else:
             for subreddit in subreddits:
                 post_to_reddit(subreddit, postTitle, postBody)
