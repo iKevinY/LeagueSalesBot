@@ -66,67 +66,65 @@ def get_sale_page(link, delay):
     """Loads appropriate content based on most recent sale or supplied test link"""
     if link:
         if requests.get(link).status_code != 200:
-            sys.exit("Terminating script.")
-        else:
-            try:
-                start, end = re.findall('.*(\d{4})-(\d{4})', link)[0]
-            except IndexError:
-                sys.exit("Invalid sale page URL.")
+            sys.exit("Terminating script. ({0} not found)".format(link))
 
-            for dateFormat in ('%m%d', '%d%m'):
-                try:
-                    saleStart = datetime.datetime.strptime(start, dateFormat)
-                    saleEnd = datetime.datetime.strptime(end, dateFormat)
-                    dateRange = format_range(saleStart, saleEnd)
-                    break
-                except ValueError:
-                    # Pass to try other date formats; for loop will catch the exception
-                    pass
-            else:
-                sys.exit("Date range could not be determined from sale URL.")
-
-            saleLink = link
-    else:
         try:
-            # Use value of lastRotation to differentiate between Monday and Thursday
-            # sales (which have different offsets before the next sale)
-            lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
-            saleStart = lastSaleEnd + datetime.timedelta((lastrun.lastRotation + 1) % 2)
-            saleEnd = saleStart + datetime.timedelta(3) # Four-day sales
-        except AttributeError:
-            print "Invalid data in lastrun.py. Attemping to repair."
-            repair_lastrun()
+            start, end = re.findall('.*(\d{4})-(\d{4})', link)[0]
+        except IndexError:
+            sys.exit("Invalid sale page URL.")
 
-        dateRange = format_range(saleStart, saleEnd)
+        for dateFormat in ('%m%d', '%d%m'):
+            try:
+                saleStart = datetime.datetime.strptime(start, dateFormat)
+                saleEnd = datetime.datetime.strptime(end, dateFormat)
+                dateRange = format_range(saleStart, saleEnd)
+                return link, dateRange
+            except ValueError:
+                # Pass to try other date formats; for loop will catch the exception
+                pass
+        else:
+            sys.exit("Date range could not be determined from sale URL.")
 
-        regions = ('na', 'euw')
-        dateFormats = ('%m%d', '%d%m')
-        linkPermutations = ((region, saleStart.strftime(format), saleEnd.strftime(format))
-            for region in regions for format in dateFormats)
+    try:
+        # Use value of lastRotation to differentiate between Monday and Thursday
+        # sales (which have different offsets before the next sale)
+        lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
+        saleStart = lastSaleEnd + datetime.timedelta((lastrun.lastRotation + 1) % 2)
+        saleEnd = saleStart + datetime.timedelta(3) # Four-day sales
+    except AttributeError:
+        print "Invalid data in lastrun.py. Attemping to repair."
+        repair_lastrun()
 
-        links = [settings.baseLink.format(*permutation) for permutation in linkPermutations]
+    dateRange = format_range(saleStart, saleEnd)
 
-        print "Last sale ended on {0}. Requesting {1} sale pages.".format(
-            lastSaleEnd.strftime("%B %-d"), dateRange
-        )
+    regions = ('na', 'euw')
+    dateFormats = ('%m%d', '%d%m')
+    linkPermutations = ((region, saleStart.strftime(format), saleEnd.strftime(format))
+        for region in regions for format in dateFormats)
 
-        if delay:
-            delay = int(delay) if delay.is_integer() else delay
-            print "Sleeping for {0} {1}.".format(delay, "hour" if delay == 1 else "hours")
-            time.sleep(delay * 60 * 60)
+    links = [settings.baseLink.format(*permutation) for permutation in linkPermutations]
 
-        saleLink = None
+    print "Last sale ended on {0}. Requesting {1} sale pages.".format(
+        lastSaleEnd.strftime("%B %-d"), dateRange
+    )
 
-        refreshDelay = settings.refresh
-        print "Refreshing every {0} seconds (c-C to force quit)...".format(refreshDelay)
+    if delay:
+        delay = int(delay) if delay.is_integer() else delay
+        print "Sleeping for {0} {1}.".format(delay, "hour" if delay == 1 else "hours")
+        time.sleep(delay * 60 * 60)
 
-        while not saleLink:
-            for link in links:
-                if requests.get(link).status_code == 200:
-                    saleLink = link
-                    break
-            else:
-                time.sleep(refreshDelay)
+    saleLink = None
+
+    refreshDelay = settings.refresh
+    print "Refreshing every {0} seconds (c-C to force quit)...".format(refreshDelay)
+
+    while not saleLink:
+        for link in links:
+            if requests.get(link).status_code == 200:
+                saleLink = link
+                break
+        else:
+            time.sleep(refreshDelay)
 
     return saleLink, dateRange
 
