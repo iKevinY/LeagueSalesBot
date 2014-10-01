@@ -195,8 +195,10 @@ def sale_output(sale):
 
 def make_post(saleArray, saleLink):
     """Formats sale data into Reddit post"""
-    # Determine prices of next sale skins given the previous sale (stored in lastrun.py)
-    rotation = [(975, 750, 520), (1350, 975, 520), (975, 750, 520), (975, 975, 520)]
+    # Determine prices of next sale skins given the previous sale
+    rotation = [(975, 750, 520), (1350, 975, 520),
+                (975, 750, 520), (975, 975, 520)]
+
     nextRotation = rotation[(lastrun.lastRotation + 2) % 4]
 
     return (
@@ -220,7 +222,8 @@ def get_spotlight(sale):
     searchTerm = '{0} {1} Spotlight'.format(
         sale.saleName, 'Skin' if sale.isSkin else 'Champion').replace(' ', '+')
 
-    videoPage = 'https://www.youtube.com/user/{0}/search?query={1}'.format(channel, searchTerm)
+    videoBase = 'https://www.youtube.com/user/{0}/search?query={1}'
+    videoPage = videoBase.format(channel, searchTerm)
     pageContent = requests.get(videoPage).text
 
     try:
@@ -243,27 +246,26 @@ def get_spotlight(sale):
 
 def post_to_reddit(subreddit, postTitle, content):
     """Posts self or link posts to subreddits as defined in settings.py"""
-    # Handle Reddit's automatic rate limiting
-    def rate_limited(func, *args, **kwargs):
-        while True:
-            try:
-                return func(*args, **kwargs)
-            except praw.errors.RateLimitExceeded as error:
-                sleepTime = int(error.sleep_time + 1)
-                print 'Rate limit exceeded. Sleeping for {0} seconds.'.format(sleepTime)
-                time.sleep(sleepTime)
-
     postContent = {'url' if content.startswith('http') else 'text': content}
 
     r = praw.Reddit(user_agent=settings.userAgent)
     r.login(settings.username, settings.password)
-    submission = rate_limited(r.submit, subreddit, postTitle, **postContent)
 
-    click.secho("Submitted {0} post at {1}/".format(
-        "link" if content.startswith('http') else "self",
-        submission.permalink.rsplit('/', 2)[0]),
-        fg='green'
-    )
+    while True:
+        try:
+            submission = r.submit(subreddit, postTitle, **postContent)
+        except praw.errors.RateLimitExceeded as error:
+            sleepTime = int(error.sleep_time + 1)
+            print 'Rate limit exceeded. Sleeping for {0} seconds.'.format(sleepTime)
+            time.sleep(sleepTime)
+        else:
+            click.secho("Submitted {0} post at {1}/".format(
+                "link" if content.startswith('http') else "self",
+                submission.permalink.rsplit('/', 2)[0]),
+                fg='green'
+            )
+
+            return submission
 
 
 def update_lastrun(saleEndText, rotationIndex=None):
