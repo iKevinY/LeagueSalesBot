@@ -246,7 +246,8 @@ def get_spotlight(sale):
 
 def post_to_reddit(subreddit, postTitle, content):
     """Posts self or link posts to subreddits as defined in settings.py"""
-    postContent = {'url' if content.startswith('http') else 'text': content}
+    isLink = content.startswith('http')
+    postContent = {'url' if isLink else 'text': content}
 
     r = praw.Reddit(user_agent=settings.userAgent)
     r.login(settings.username, settings.password)
@@ -256,41 +257,34 @@ def post_to_reddit(subreddit, postTitle, content):
             submission = r.submit(subreddit, postTitle, **postContent)
         except praw.errors.RateLimitExceeded as error:
             sleepTime = int(error.sleep_time + 1)
-            print 'Rate limit exceeded. Sleeping for {0} seconds.'.format(sleepTime)
+            print 'Sleeping for {0} seconds (rate limited).'.format(sleepTime)
             time.sleep(sleepTime)
         else:
-            click.secho("Submitted {0} post at {1}/".format(
-                "link" if content.startswith('http') else "self",
-                submission.permalink.rsplit('/', 2)[0]),
-                fg='green'
-            )
+            postType = 'link' if isLink else 'self'
+            click.secho("Submitted {0} post.", fg='green').format(postType)
+            click.echo(submission.permalink.rsplit('/', 2)[0] + '/')
 
             return submission
 
 
-def update_lastrun(saleEndText, rotationIndex=None):
+def update_lastrun(saleEnd, rotationIndex=None):
     """Updates lastrun.py with sale date and rotation information"""
     try:
         lastSaleEnd, lastRotation = lastrun.lastSaleEnd, lastrun.lastRotation
     except AttributeError:
-        lastSaleEnd, lastRotation = None, None
-
-    if rotationIndex is None:
-        try:
-            rotationIndex = (lastRotation + 1) % 4
-        except AttributeError:
-            pass
+        lastSaleEnd, lastRotation, rotationIndex = None, None, None
+    else:
+        if rotationIndex is None:
+            rotationIndex = (lastRotation + 1 % 4)
 
     directory = os.path.dirname(os.path.realpath(__file__))
     path = os.path.join(directory, 'lastrun.py')
 
-    print "Modified lastrun.py from ({0}, {1}) to".format(lastSaleEnd, lastRotation),
-    sys.stdout.flush()
-
     with open(path, 'w+') as f:
-        f.write('lastSaleEnd = "{0}"\nlastRotation = {1}\n'.format(saleEndText, rotationIndex))
+        f.write('lastSaleEnd = "{0}"\nlastRotation = {1}\n'.format(saleEnd, rotationIndex))
 
-    print "({0}, {1}).".format(saleEndText, rotationIndex)
+    modifyString = "Modified lastrun.py from ({0}, {1}) to ({2}, {3})."
+    print modifyString.format(lastSaleEnd, lastRotation, saleEnd, rotationIndex),
 
 
 def extrapolate_link(lastSaleEnd, region='na'):
@@ -388,10 +382,11 @@ def main(last, link, repair, subreddits):
     # Get spotlights and print to terminal
     for sale in saleArray:
         sale.spotlight, sale.spotlightName = get_spotlight(sale)
-        print '{saleName: <30}{salePrice} RP\t{spotlightName}'.format(**sale.__dict__)
+        tableArgs = sale.saleName, sale.salePrice, sale.spotlightName
+        print '{0: <30}{1} RP\t{2}'.format(*tableArgs)
 
     postBody = make_post(saleArray, saleLink)
-    print '\n\n' + postBody + '\n\n'
+    print '\n----\n\n' + postBody
 
     # Post to Reddit and update lastrun.py with correct information if link was not supplied
     if not link:
