@@ -291,11 +291,10 @@ def update_lastrun(saleEnd, rotationIndex=None):
 def extrapolate_link(lastSaleEnd, region='na'):
     """Used to extrapolate sale link from end sale date"""
     lastSaleStart = lastSaleEnd - timedelta(3)
-    return settings.baseLink.format(
-        region,
-        datetime.strftime(lastSaleStart, '%m%d'),
-        datetime.strftime(lastSaleEnd, '%m%d')
-    )
+    start = datetime.strftime(lastSaleStart, '%m%d')
+    end = datetime.strftime(lastSaleEnd, '%m%d')
+
+    return settings.baseLink.format(region, start, end)
 
 
 def repair_lastrun():
@@ -344,11 +343,11 @@ def repair_lastrun():
 
 @click.command()
 @click.option('--last', '-l', is_flag=True, help="Crawls most recent sale data.")
+@click.option('--link', default=None, help="Link to sale page.")
+@click.option('--output', default=None, help="Post output path.", type=click.File('a'))
 @click.option('--repair', is_flag=True, help="Attemps to repair data in lastrun.py.")
-@click.option('--link', default=None, help="Link to sale page.", metavar='<link>')
 @click.argument('subreddits', nargs=-1)
-
-def main(last, link, repair, subreddits):
+def main(last, link, output, repair, subreddits):
     """
     Python script that generates Reddit-formatted summaries of the biweekly
     League of Legends champion and skin sales.
@@ -373,10 +372,8 @@ def main(last, link, repair, subreddits):
 
         sys.exit()
 
-    postTitle = settings.baseTitle.format(
-        ', '.join(sale.saleName for sale in saleArray if sale.isSkin),
-        dateRange
-    )
+    skinSales = ', '.join(sale.saleName for sale in saleArray if sale.isSkin)
+    postTitle = settings.baseTitle.format(skinSales, dateRange)
 
     click.secho(postTitle, fg='cyan', bold=True)
 
@@ -387,7 +384,10 @@ def main(last, link, repair, subreddits):
         print '{0: <30}{1} RP\t{2}'.format(*tableArgs)
 
     postBody = make_post(saleArray, saleLink)
-    print '\n----\n\n' + postBody
+
+    # Write post body to output file if given
+    if output:
+        output.write(postBody + '\n')
 
     # Post to Reddit and update lastrun.py with correct information if link was not supplied
     if not link:
