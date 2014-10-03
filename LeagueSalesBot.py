@@ -106,28 +106,23 @@ def get_sale_page(link):
 
     regions = ('na', 'euw')
     dateFormats = ('%m%d', '%d%m')
-    linkPermutations = ((region, saleStart.strftime(format), saleEnd.strftime(format))
-        for region in regions for format in dateFormats)
+    linkPermutations = ((region, saleStart.strftime(form), saleEnd.strftime(form))
+        for region in regions for form in dateFormats)
 
     links = [settings.baseLink.format(*permutation) for permutation in linkPermutations]
 
-    print "Last sale ended on {0}. Requesting {1} sale pages.".format(
-        lastSaleEnd.strftime("%B %-d"), dateRange
-    )
+    searchString = "Last sale ended on {0}. Searching for {1} sale."
+    print searchString.format(lastSaleEnd.strftime("%B %-d"), dateRange)
 
-    saleLink = None
-    refreshDelay = settings.refresh
-    print "Refreshing every {0} seconds (c-C to force quit)...".format(refreshDelay)
+    refreshRate = settings.refresh
+    print "Refreshing every {0} seconds (c-C to force quit)...".format(refreshRate)
 
-    while not saleLink:
+    while True:
         for link in links:
             if requests.get(link).status_code == 200:
-                saleLink = link
-                break
+                return link, dateRange
         else:
-            time.sleep(refreshDelay)
-
-    return saleLink, dateRange
+            time.sleep(refreshRate)
 
 
 def get_sales(saleLink):
@@ -190,8 +185,9 @@ def sale_output(sale):
     sale.wikiLink = 'http://leagueoflegends.wikia.com/wiki/' + sale.champName.replace(' ', '_')
     sale.resources = format_resources(sale)
 
-    return ('|{icon}|**[{saleName}]({wikiLink})**|'
-            '{salePrice} RP|~~{regularPrice} RP~~|{resources}|'.format(**sale.__dict__))
+    row = '|{icon}|**[{saleName}]({wikiLink})**|{salePrice} RP|~~{regularPrice} RP~~|{resources}|'
+
+    return (row.format(**sale.__dict__))
 
 
 def make_post(saleArray, saleLink):
@@ -231,18 +227,18 @@ def get_spotlight(sale):
         searchResult = '<h3 class="yt-lockup-title"><a.*?href="(\S*)">(.*)</a></h3>'
         slug, spotlightName = re.findall(searchResult, pageContent)[0]
         spotlightName = spotlightName.replace('&#39;', "'") # patch for apostrophe
-        spotlightURL = 'https://www.youtube.com' + slug
+        spotlightLink = 'https://www.youtube.com' + slug
     except IndexError:
-        spotlightURL = None
+        spotlightLink = None
         spotlightName = "Error parsing spotlight."
 
     # Handle cases where no spotlight exists, ie. Janna (Forecast Janna is top result)
     if not sale.isSkin:
         if ("Spotlight" not in spotlightName) or (sale.saleName not in spotlightName):
-            spotlightURL = None
+            spotlightLink = None
             spotlightName = click.style(spotlightName, fg='red')
 
-    return spotlightURL, spotlightName
+    return spotlightLink, spotlightName
 
 
 def post_to_reddit(subreddit, postTitle, content):
@@ -285,7 +281,7 @@ def update_lastrun(saleEnd, rotationIndex=None):
         f.write('lastSaleEnd = "{0}"\nlastRotation = {1}\n'.format(saleEnd, rotationIndex))
 
     modifyString = "Modified lastrun.py from ({0}, {1}) to ({2}, {3})."
-    print modifyString.format(lastSaleEnd, lastRotation, saleEnd, rotationIndex),
+    print modifyString.format(lastSaleEnd, lastRotation, saleEnd, rotationIndex)
 
 
 def extrapolate_link(lastSaleEnd, region='na'):
@@ -337,15 +333,15 @@ def repair_lastrun():
     lastSaleEndText = datetime.strftime(lastSaleEnd, '%Y-%m-%d')
     update_lastrun(lastSaleEndText, rotationIndex=lastRotationIndex)
 
-    sys.exit("lastrun.py repaired successfully. Upcoming sale: {0}, {1}, {2} RP").format(
-        *rotation[(lastRotationIndex + 1) % 4])
+    click.secho('lastrun.py repaired successfully.', fg='green')
+    sys.exit()
 
 
 @click.command()
 @click.option('--last', '-l', is_flag=True, help="Crawls most recent sale data.")
 @click.option('--link', default=None, help="Link to sale page.")
-@click.option('--output', default=None, help="Post output path.", type=click.File('a'))
-@click.option('--repair', is_flag=True, help="Attemps to repair data in lastrun.py.")
+@click.option('--output', '-o', default=None, help="Post output path.", type=click.File('a'))
+@click.option('--repair', is_flag=True, help="Repair data in lastrun.py.")
 @click.argument('subreddits', nargs=-1)
 def main(last, link, output, repair, subreddits):
     """
