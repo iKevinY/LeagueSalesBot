@@ -4,8 +4,9 @@
 import os
 import sys
 import re
-import datetime
 import time
+
+from datetime import datetime, timedelta
 
 import requests
 import praw
@@ -78,8 +79,8 @@ def get_date_range(link):
 
     for dateFormat in ('%m%d', '%d%m'):
         try:
-            saleStart = datetime.datetime.strptime(start, dateFormat)
-            saleEnd = datetime.datetime.strptime(end, dateFormat)
+            saleStart = datetime.strptime(start, dateFormat)
+            saleEnd = datetime.strptime(end, dateFormat)
             dateRange = format_range(saleStart, saleEnd)
             return link, dateRange
         except ValueError:
@@ -94,9 +95,9 @@ def get_sale_page(link):
     try:
         # Use value of lastRotation to differentiate between Monday and Thursday
         # sales (which have different offsets before the next sale)
-        lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
-        saleStart = lastSaleEnd + datetime.timedelta((lastrun.lastRotation + 1) % 2)
-        saleEnd = saleStart + datetime.timedelta(3) # Four-day sales
+        lastSaleEnd = datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
+        saleStart = lastSaleEnd + timedelta((lastrun.lastRotation + 1) % 2)
+        saleEnd = saleStart + timedelta(3) # Four-day sales
     except AttributeError:
         print "Invalid data in lastrun.py. Attemping to repair."
         repair_lastrun()
@@ -289,11 +290,11 @@ def update_lastrun(saleEnd, rotationIndex=None):
 
 def extrapolate_link(lastSaleEnd, region='na'):
     """Used to extrapolate sale link from end sale date"""
-    lastSaleStart = lastSaleEnd - datetime.timedelta(3)
+    lastSaleStart = lastSaleEnd - timedelta(3)
     return settings.baseLink.format(
         region,
-        datetime.datetime.strftime(lastSaleStart, '%m%d'),
-        datetime.datetime.strftime(lastSaleEnd, '%m%d')
+        datetime.strftime(lastSaleStart, '%m%d'),
+        datetime.strftime(lastSaleEnd, '%m%d')
     )
 
 
@@ -302,7 +303,7 @@ def repair_lastrun():
     # Run through five possible sale pages starting from datetime.now()
     print "Determining most recent sale page."
     for delta in range(-4, 1):
-        endDate = datetime.datetime.now() - datetime.timedelta(delta)
+        endDate = datetime.now() - timedelta(delta)
         link = extrapolate_link(endDate)
 
         if requests.get(link).status_code == 200:
@@ -322,7 +323,7 @@ def repair_lastrun():
     if lastRotation == ('975', '750', '520'):
         print "Extrapolating two sales back for correct rotation (ambiguous case)."
         for delta in (3, 4):
-            twoSaleEnd = lastSaleEnd - datetime.timedelta(delta)
+            twoSaleEnd = lastSaleEnd - timedelta(delta)
             twoLink = extrapolate_link(twoSaleEnd)
             if requests.get(twoLink).status_code == 200:
                 twoRotation = get_rotation(twoLink)
@@ -334,7 +335,7 @@ def repair_lastrun():
     else:
         lastRotationIndex = rotation.index(lastRotation)
 
-    lastSaleEndText = datetime.datetime.strftime(lastSaleEnd, '%Y-%m-%d')
+    lastSaleEndText = datetime.strftime(lastSaleEnd, '%Y-%m-%d')
     update_lastrun(lastSaleEndText, rotationIndex=lastRotationIndex)
 
     sys.exit("lastrun.py repaired successfully. Upcoming sale: {0}, {1}, {2} RP").format(
@@ -356,7 +357,7 @@ def main(last, link, repair, subreddits):
     if repair:
         repair_lastrun()
     elif last:
-        lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
+        lastSaleEnd = datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
         link = extrapolate_link(lastSaleEnd)
 
     linkFunction = get_date_range if link else get_sale_page
@@ -396,7 +397,7 @@ def main(last, link, repair, subreddits):
         for subreddit in subreddits:
             post_to_reddit(subreddit, postTitle, postBody)
 
-        endOfSale = (datetime.datetime.now() + datetime.timedelta(4)).strftime('%Y-%m-%d')
+        endOfSale = (datetime.now() + timedelta(4)).strftime('%Y-%m-%d')
         update_lastrun(endOfSale)
 
 
