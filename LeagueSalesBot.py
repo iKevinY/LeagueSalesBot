@@ -37,9 +37,13 @@ class Champ(Sale):
 def format_range(saleStart, saleEnd):
     """Returns properly formatted date range for sale start and end"""
     if saleStart.month == saleEnd.month:
-        return '{0}–{1}'.format(saleStart.strftime('%B %-d'), saleEnd.strftime('%-d'))
+        dateString = '{0}–{1}'
+        start, end = '%B %-d', '%-d'
     else:
-        return '{0} – {1}'.format(saleStart.strftime('%B %-d'), saleEnd.strftime('%B %-d'))
+        dateString = '{0} – {1}'
+        start, end = '%B %-d', '%B %-d'
+
+    return dateString.format(saleStart.strftime(start), saleEnd.strftime(end))
 
 
 def format_resources(sale):
@@ -62,29 +66,31 @@ def format_resources(sale):
     )
 
 
-def get_sale_page(link, delay):
-    """Loads appropriate content based on most recent sale or supplied test link"""
-    if link:
-        if requests.get(link).status_code != 200:
-            sys.exit("Terminating script. ({0} not found)".format(link))
+def get_date_range(link):
+    """Determines date range string for a given sale link"""
+    if requests.get(link).status_code != 200:
+        sys.exit("Terminating script. ({0} not found)".format(link))
 
+    try:
+        start, end = re.findall('.*(\d{4})-(\d{4})', link)[0]
+    except IndexError:
+        sys.exit("Invalid sale page URL.")
+
+    for dateFormat in ('%m%d', '%d%m'):
         try:
-            start, end = re.findall('.*(\d{4})-(\d{4})', link)[0]
-        except IndexError:
-            sys.exit("Invalid sale page URL.")
+            saleStart = datetime.datetime.strptime(start, dateFormat)
+            saleEnd = datetime.datetime.strptime(end, dateFormat)
+            dateRange = format_range(saleStart, saleEnd)
+            return link, dateRange
+        except ValueError:
+            # Pass to try other date formats; for loop will catch the exception
+            pass
+    else:
+        sys.exit("Date range could not be determined from sale URL.")
 
-        for dateFormat in ('%m%d', '%d%m'):
-            try:
-                saleStart = datetime.datetime.strptime(start, dateFormat)
-                saleEnd = datetime.datetime.strptime(end, dateFormat)
-                dateRange = format_range(saleStart, saleEnd)
-                return link, dateRange
-            except ValueError:
-                # Pass to try other date formats; for loop will catch the exception
-                pass
-        else:
-            sys.exit("Date range could not be determined from sale URL.")
 
+def get_sale_page(link):
+    """Loads appropriate content based on most recent sale or supplied test link"""
     try:
         # Use value of lastRotation to differentiate between Monday and Thursday
         # sales (which have different offsets before the next sale)
@@ -108,13 +114,7 @@ def get_sale_page(link, delay):
         lastSaleEnd.strftime("%B %-d"), dateRange
     )
 
-    if delay:
-        delay = int(delay) if delay.is_integer() else delay
-        print "Sleeping for {0} {1}.".format(delay, "hour" if delay == 1 else "hours")
-        time.sleep(delay * 60 * 60)
-
     saleLink = None
-
     refreshDelay = settings.refresh
     print "Refreshing every {0} seconds (c-C to force quit)...".format(refreshDelay)
 
@@ -348,13 +348,12 @@ def repair_lastrun():
 
 
 @click.command()
-@click.option('--delay', '-d', default=0.0, help="Delay before running script.", metavar='<hours>')
 @click.option('--last', '-l', is_flag=True, help="Crawls most recent sale data.")
 @click.option('--repair', is_flag=True, help="Attemps to repair data in lastrun.py.")
 @click.option('--link', default=None, help="Link to sale page.", metavar='<link>')
 @click.argument('subreddits', nargs=-1)
 
-def main(delay, last, link, repair, subreddits):
+def main(last, link, repair, subreddits):
     """
     Python script that generates Reddit-formatted summaries of the biweekly
     League of Legends champion and skin sales.
@@ -366,7 +365,9 @@ def main(delay, last, link, repair, subreddits):
         lastSaleEnd = datetime.datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
         link = extrapolate_link(lastSaleEnd)
 
-    saleLink, dateRange = get_sale_page(link, delay)
+    linkFunction = get_date_range if link else get_sale_page
+    saleLink, dateRange = linkFunction(link)
+
     saleArray = get_sales(saleLink)
 
     # Post link post if sale parsing failed (fallback to ensure a post gets made)
@@ -396,9 +397,9 @@ def main(delay, last, link, repair, subreddits):
     if not link:
         if not subreddits:
             sys.exit("There were no subreddit arguments given.")
-        else:
-            for subreddit in subreddits:
-                post_to_reddit(subreddit, postTitle, postBody)
+
+        for subreddit in subreddits:
+            post_to_reddit(subreddit, postTitle, postBody)
 
         endOfSale = (datetime.datetime.now() + datetime.timedelta(4)).strftime('%Y-%m-%d')
         update_lastrun(endOfSale)
