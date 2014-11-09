@@ -62,8 +62,7 @@ def format_resources(sale):
         )
 
     return ', '.join('[{0}]({1})'.format(text, link)
-        for link, text in resources if link is not None
-    )
+        for link, text in resources if link is not None)
 
 
 def get_date_range(link):
@@ -83,17 +82,16 @@ def get_date_range(link):
             dateRange = format_range(saleStart, saleEnd)
             return link, dateRange
         except ValueError:
-            # Pass to try other date formats; for loop will catch the exception
-            pass
+            pass # try other date formats
     else:
         sys.exit("Date range could not be determined from sale URL.")
 
 
 def get_sale_page(link):
-    """Loads appropriate content based on most recent sale or supplied test link"""
+    """Loads appropriate content based on most recent sale or given link"""
     try:
-        # Use value of lastRotation to differentiate between Monday and Thursday
-        # sales (which have different offsets before the next sale)
+        # Use value of lastRotation to differentiate between Monday and
+        # Thursday sales (which have different date offsets)
         lastSaleEnd = datetime.strptime(lastrun.lastSaleEnd, '%Y-%m-%d')
         saleStart = lastSaleEnd + timedelta((lastrun.lastRotation + 1) % 2)
         saleEnd = saleStart + timedelta(3) # Four-day sales
@@ -105,10 +103,10 @@ def get_sale_page(link):
 
     regions = ('na', 'euw')
     dateFormats = ('%m%d', '%d%m')
-    linkPermutations = ((region, saleStart.strftime(form), saleEnd.strftime(form))
+    permutations = ((region, saleStart.strftime(form), saleEnd.strftime(form))
         for region in regions for form in dateFormats)
 
-    links = [settings.baseLink.format(*permutation) for permutation in linkPermutations]
+    links = [settings.baseLink.format(*permutation) for permutation in permutations]
 
     searchString = "Last sale ended on {0}. Searching for {1} sale."
     print searchString.format(lastSaleEnd.strftime("%B %-d"), dateRange)
@@ -126,7 +124,14 @@ def get_sale_page(link):
 
 def get_sales(saleLink):
     """Parses sale page for sale data"""
-    saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
+
+    # Riot Please...
+    skinsFirst = False
+
+    if skinsFirst:
+        saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
+    else:
+        saleArray = [Champ(), Champ(), Champ(), Skin(), Skin(), Skin()]
 
     # Define regexes for sales, skin art, and champion info pages
     regexes = (
@@ -145,19 +150,51 @@ def get_sales(saleLink):
             print "Sale data could not be parsed by regexes."
             return None
 
-        if sale.isSkin:
-            try:
-                sale.splashArt = skinList[i*2]
-                sale.inGameArt = skinList[i*2 + 1]
-            except IndexError:
-                print "Art for %s not parsed." % sale.saleName
-                sale.splashArt, sale.inGameArt = None, None
+        if skinsFirst:
+            if sale.isSkin:
+                try:
+                    sale.splashArt = skinList[i*2]
+                    sale.inGameArt = skinList[i*2 + 1]
+                except IndexError:
+                    print "Art for %s not parsed." % sale.saleName
+                    sale.splashArt, sale.inGameArt = None, None
+            else:
+                try:
+                    sale.infoPage = infoList[(i - 3) * 2]
+                except IndexError:
+                    print "Info page for %s not parsed." % sale.saleName
+                    sale.infoPage = None
+
         else:
-            try:
-                sale.infoPage = infoList[(i - 3) * 2]
-            except IndexError:
-                print "Info page for %s not parsed." % sale.saleName
-                sale.infoPage = None
+            if not sale.isSkin:
+                try:
+                    sale.infoPage = infoList[i*2]
+                except IndexError:
+                    print "Info page for %s not parsed." % sale.saleName
+                    sale.infoPage = None
+
+            else:
+                try:
+                    sale.splashArt = skinList[(3 - i) * 2]
+                    sale.inGameArt = skinList[(3 - i) * 2 + 1]
+                except IndexError:
+                    print "Art for %s not parsed." % sale.saleName
+                    sale.splashArt, sale.inGameArt = None, None
+
+
+    # Safeguard against Riot accidentally putting the prices in the wrong spot
+    # by checking the price of the last skin sale (which should be 520 -> 260)
+    if saleArray[2].regularPrice == '260' and saleArray[2].salePrice == '130':
+        for sale in saleArray:
+            # Scraped "regular price" is *actually* the sale price,
+            # so determine the real sale price from that value
+            sale.salePrice = sale.regularPrice
+            sale.regularPrice = int(sale.salePrice) * 2
+
+            if sale.regularPrice % 5 != 0:
+                sale.regularPrice = str(sale.regularPrice + 1)
+            else:
+                sale.regularPrice = str(sale.regularPrice)
 
     # Sorts sale array by skins > champions and then by price (in reverse)
     return sorted(saleArray, key=lambda sale: (sale.isSkin, sale.salePrice), reverse=True)
@@ -223,7 +260,7 @@ def get_spotlight(sale):
     pageContent = requests.get(videoPage).text
 
     try:
-        searchResult = '<h3 class="yt-lockup-title"><a.*?href="(\S*)">(.*)</a></h3>'
+        searchResult = '<h3 class="yt-lockup-title"><a.*?href="(\S*)">(.*)<\/a>'
         slug, spotlightName = re.findall(searchResult, pageContent)[0]
         spotlightName = spotlightName.replace('&#39;', "'") # patch for apostrophe
         spotlightLink = 'https://www.youtube.com' + slug
@@ -257,7 +294,7 @@ def post_to_reddit(subreddit, postTitle, content):
             time.sleep(sleepTime)
         else:
             postType = 'link' if isLink else 'self'
-            click.secho("Submitted {0} post.", fg='green').format(postType)
+            click.secho("Submitted {0} post.".format(postType), fg='green')
             click.echo(submission.permalink.rsplit('/', 2)[0] + '/')
 
             return submission
@@ -359,7 +396,7 @@ def main(last, link, output, repair, subreddits):
 
     saleArray = get_sales(saleLink)
 
-    # Post link post if sale parsing failed (fallback to ensure a post gets made)
+    # Post link post if sale parsing failed
     if saleArray is None:
         if subreddits:
             postTitle = 'Champion & Skin Sale — {0}'.format(dateRange)
@@ -384,7 +421,7 @@ def main(last, link, output, repair, subreddits):
     if output:
         output.write(postBody + '\n')
 
-    # Post to Reddit and update lastrun.py with correct information if link was not supplied
+    # Post to Reddit and update lastrun.py if link was not given
     if not link:
         if not subreddits:
             sys.exit("There were no subreddit arguments given.")
