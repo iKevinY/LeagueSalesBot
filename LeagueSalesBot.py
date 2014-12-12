@@ -15,6 +15,10 @@ import lastrun
 import settings
 import skins
 
+# Riot Please...
+SKINS_FIRST = True
+
+
 class Sale(object):
     def __init__(self):
         self.saleName = ''
@@ -125,10 +129,7 @@ def get_sale_page(link):
 def get_sales(saleLink):
     """Parses sale page for sale data"""
 
-    # Riot Please...
-    skinsFirst = False
-
-    if skinsFirst:
+    if SKINS_FIRST:
         saleArray = [Skin(), Skin(), Skin(), Champ(), Champ(), Champ()]
     else:
         saleArray = [Champ(), Champ(), Champ(), Skin(), Skin(), Skin()]
@@ -150,7 +151,7 @@ def get_sales(saleLink):
             print "Sale data could not be parsed by regexes."
             return None
 
-        if skinsFirst:
+        if SKINS_FIRST:
             if sale.isSkin:
                 try:
                     sale.splashArt = skinList[i*2]
@@ -251,9 +252,11 @@ def make_post(saleArray, saleLink):
 
 def get_spotlight(sale):
     """Finds appropriate champion or skin spotlight video for sale"""
-    channel = 'SkinSpotlights' if sale.isSkin else 'RiotGamesInc'
-    searchTerm = '{0} {1} Spotlight'.format(
-        sale.saleName, 'Skin' if sale.isSkin else 'Champion').replace(' ', '+')
+    if sale.isSkin:
+        return None, None
+
+    channel = 'RiotGamesInc'
+    searchTerm = '{0} {1} Spotlight'.format(sale.saleName, 'Champion').replace(' ', '+')
 
     videoBase = 'https://www.youtube.com/user/{0}/search?query={1}'
     videoPage = videoBase.format(channel, searchTerm)
@@ -269,10 +272,9 @@ def get_spotlight(sale):
         spotlightName = "Error parsing spotlight."
 
     # Handle cases where no spotlight exists, ie. Janna (Forecast Janna is top result)
-    if not sale.isSkin:
-        if ("Spotlight" not in spotlightName) or (sale.saleName not in spotlightName):
-            spotlightLink = None
-            spotlightName = click.style(spotlightName, fg='red')
+    if ("Spotlight" not in spotlightName) or (sale.saleName not in spotlightName):
+        spotlightLink = None
+        spotlightName = click.style(spotlightName, fg='red')
 
     return spotlightLink, spotlightName
 
@@ -424,7 +426,10 @@ def main(last, link, output, repair, subreddits):
     # Post to Reddit and update lastrun.py if link was not given
     if not link:
         if not subreddits:
-            sys.exit("There were no subreddit arguments given.")
+            print
+            print postBody
+
+            sys.exit()
 
         for subreddit in subreddits:
             post_to_reddit(subreddit, postTitle, postBody)
